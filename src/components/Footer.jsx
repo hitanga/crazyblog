@@ -28,10 +28,15 @@ export default function Footer() {
               Categories
             </h4>
             <ul className="space-y-2.5 text-xs text-stone-400">
-              {['Technology', 'Lifestyle', 'Travel', 'JavaScript', 'React', 'Design'].map((cat) => (
-                <li key={cat}>
-                  <Link to={`/category/${cat}`} className="hover:text-rose-500 transition-colors">
-                    {cat}
+              {[
+                { name: 'Horror Stories', path: '/category/Horror-Stories' },
+                { name: 'Amazing Facts', path: '/category/Amazing-Facts' },
+                { name: 'Knowledge Base', path: '/category/Knowledge-Base' },
+                { name: 'All Stories', path: '/blog' },
+              ].map((cat) => (
+                <li key={cat.name}>
+                  <Link to={cat.path} className="hover:text-rose-500 transition-colors">
+                    {cat.name}
                   </Link>
                 </li>
               ))}

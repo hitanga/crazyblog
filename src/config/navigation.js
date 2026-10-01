@@ -5,20 +5,20 @@ const navigation = [
     path: "/"
   },
   {
-    label: "NEWS",
+    label: "HORROR STORIES",
+    path: "/category/Horror-Stories"
+  },
+  {
+    label: "AMAZING FACTS",
+    path: "/category/Amazing-Facts"
+  },
+  {
+    label: "KNOWLEDGE BASE",
+    path: "/category/Knowledge-Base"
+  },
+  {
+    label: "ALL STORIES",
     path: "/blog"
-  },
-  {
-    label: "POST LAYOUTS",
-    path: "/blog/at-daybreak-of-the-fifteenth-day-of-my-search"
-  },
-  {
-    label: "CATEGORIES",
-    path: "/category/Lifestyle"
-  },
-  {
-    label: "FEATURES",
-    path: "/features"
   },
   {
     label: "CMS ADMIN",

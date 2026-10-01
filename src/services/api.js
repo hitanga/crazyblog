@@ -2,29 +2,66 @@
 import defaultPostsData from '../data/defaultPosts.json';
 
 const API_BASE = '/api';
-const STORAGE_KEY = 'gutenverse_cms_posts_v1';
+const STORAGE_KEY = 'gutenverse_cms_posts_v2';
+const DELETED_KEY = 'gutenverse_cms_deleted_slugs_v2';
+const INITIALIZED_KEY = 'gutenverse_cms_initialized_v2';
 
-// Seed initial localStorage with bundled default posts if empty
+// Helper to track permanently deleted post slugs
+function getDeletedSlugs() {
+  try {
+    const raw = localStorage.getItem(DELETED_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function markSlugDeleted(slug) {
+  try {
+    const list = getDeletedSlugs();
+    if (!list.includes(slug)) {
+      list.push(slug);
+      localStorage.setItem(DELETED_KEY, JSON.stringify(list));
+    }
+  } catch (e) {
+    console.warn('Failed to mark slug deleted:', e);
+  }
+}
+
+// Seed initial localStorage with bundled default posts if empty, respecting deletion ledger
 function getLocalPosts() {
   try {
+    const deleted = getDeletedSlugs();
+    const initialized = localStorage.getItem(INITIALIZED_KEY);
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
+
+    if (initialized === 'true' && raw !== null) {
+      // User has already initialized their CMS — respect their state even if empty []
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((p) => p && !deleted.includes(p.slug));
       }
+      return [];
     }
-    // Initialize with default posts
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultPostsData));
-    return defaultPostsData;
+
+    // First time setup: seed with bundled starter posts excluding any previously deleted
+    const initial = (Array.isArray(defaultPostsData) ? defaultPostsData : []).filter(
+      (p) => p && !deleted.includes(p.slug)
+    );
+    localStorage.setItem(INITIALIZED_KEY, 'true');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+    return initial;
   } catch {
-    return defaultPostsData;
+    return [];
   }
 }
 
 function saveLocalPosts(posts) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+    const deleted = getDeletedSlugs();
+    const clean = (posts || []).filter((p) => p && !deleted.includes(p.slug));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
+    localStorage.setItem(INITIALIZED_KEY, 'true');
   } catch (e) {
     console.warn('LocalStorage save failed:', e);
   }
@@ -44,9 +81,14 @@ async function parseJsonResponse(res) {
   }
 }
 
+function normalizeCategory(str) {
+  return (str || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+}
+
 export const api = {
   // 1. Get all posts with filtering and search
   async getPosts(params = {}) {
+    const deleted = getDeletedSlugs();
     try {
       const query = new URLSearchParams();
       if (params.category && params.category !== 'All') query.append('category', params.category);
@@ -60,9 +102,10 @@ export const api = {
       if (res.ok) {
         const data = await parseJsonResponse(res);
         if (data && data.success && Array.isArray(data.posts)) {
-          // Sync to local storage
-          saveLocalPosts(data.posts);
-          return data;
+          // Filter out any slugs the user has permanently deleted
+          const cleanPosts = data.posts.filter((p) => p && !deleted.includes(p.slug));
+          saveLocalPosts(cleanPosts);
+          return { ...data, count: cleanPosts.length, posts: cleanPosts };
         }
       }
     } catch {
@@ -70,11 +113,10 @@ export const api = {
     }
 
     // Client-side Fallback
-    let posts = getLocalPosts();
+    let posts = getLocalPosts().filter((p) => p && !deleted.includes(p.slug));
     if (params.category && params.category !== 'All') {
-      posts = posts.filter(
-        (p) => p.category && p.category.toLowerCase() === params.category.toLowerCase()
-      );
+      const targetCat = normalizeCategory(params.category);
+      posts = posts.filter((p) => p.category && normalizeCategory(p.category) === targetCat);
     }
     if (params.featured) {
       posts = posts.filter((p) => Boolean(p.featured));
@@ -95,6 +137,9 @@ export const api = {
 
   // 2. Get single post by slug
   async getPost(slug) {
+    const deleted = getDeletedSlugs();
+    if (deleted.includes(slug)) return null;
+
     try {
       const res = await fetch(`${API_BASE}/posts/${encodeURIComponent(slug)}`, {
         headers: { Accept: 'application/json' },
@@ -103,6 +148,7 @@ export const api = {
       if (res.ok) {
         const data = await parseJsonResponse(res);
         if (data && data.success && data.post) {
+          if (deleted.includes(data.post.slug)) return null;
           return data;
         }
       }
@@ -111,7 +157,7 @@ export const api = {
     }
 
     const posts = getLocalPosts();
-    const post = posts.find((p) => p.slug === slug || p.id === slug);
+    const post = posts.find((p) => (p.slug === slug || p.id === slug) && !deleted.includes(p.slug));
     if (!post) return null;
     return { success: true, post };
   },
@@ -137,6 +183,12 @@ export const api = {
       title: (data.title || '').trim(),
       slug: cleanSlug || `post-${Date.now()}`,
     };
+
+    // If this slug was in deleted ledger, remove it because user is explicitly creating a new post with it
+    try {
+      const deleted = getDeletedSlugs().filter((s) => s !== payload.slug);
+      localStorage.setItem(DELETED_KEY, JSON.stringify(deleted));
+    } catch {}
 
     try {
       const res = await fetch(`${API_BASE}/posts`, {
@@ -231,33 +283,56 @@ export const api = {
     return { success: true, message: 'Post updated successfully', post: updatedPost };
   },
 
-  // 5. Delete post
+  // 5. Delete post PERMANENTLY
   async deletePost(slug) {
+    // 1. Permanently register in deleted ledger so it never resurfaces
+    markSlugDeleted(slug);
+
+    // 2. Remove from local storage
+    const remaining = getLocalPosts().filter((p) => p.slug !== slug && p.id !== slug);
+    saveLocalPosts(remaining);
+
+    // 3. Send DELETE request to backend to delete from filesystem if server is reachable
     try {
-      const res = await fetch(`${API_BASE}/posts/${encodeURIComponent(slug)}`, {
+      await fetch(`${API_BASE}/posts/${encodeURIComponent(slug)}`, {
         method: 'DELETE',
         headers: { Accept: 'application/json' },
       });
-
-      if (res.ok) {
-        const result = await parseJsonResponse(res);
-        if (result && result.success) {
-          const posts = getLocalPosts().filter((p) => p.slug !== slug);
-          saveLocalPosts(posts);
-          return result;
-        }
-      }
     } catch {
       // Backend unavailable
     }
 
-    // Client-side Fallback
-    const posts = getLocalPosts().filter((p) => p.slug !== slug && p.id !== slug);
-    saveLocalPosts(posts);
-    return { success: true, message: 'Post deleted successfully' };
+    return { success: true, message: 'Post permanently deleted' };
   },
 
-  // 6. Get comments for a post
+  // 6. Delete all demo posts permanently with one click
+  async deleteAllDefaultPosts() {
+    const demoSlugs = [
+      'at-daybreak-of-the-fifteenth-day-of-my-search',
+      'i-shouted-above-the-sudden-noise',
+      'react-js-guide',
+      'the-great-excavation-lay-far-from-the-plaza',
+      'the-sunset-faded-to-twilight',
+      'then-going-through-some-small-strange-motions',
+      'two-long-weeks-i-wandered',
+    ];
+
+    for (const slug of demoSlugs) {
+      markSlugDeleted(slug);
+      try {
+        await fetch(`${API_BASE}/posts/${encodeURIComponent(slug)}`, {
+          method: 'DELETE',
+          headers: { Accept: 'application/json' },
+        });
+      } catch {}
+    }
+
+    const remaining = getLocalPosts().filter((p) => !demoSlugs.includes(p.slug));
+    saveLocalPosts(remaining);
+    return { success: true, message: 'All default demo posts deleted permanently' };
+  },
+
+  // 7. Get comments for a post
   async getComments(slug, all = false) {
     try {
       const query = all ? '?all=true' : '';
@@ -283,7 +358,7 @@ export const api = {
     return { success: true, count: filtered.length, comments: filtered };
   },
 
-  // 7. Add comment to a post
+  // 8. Add comment to a post
   async addComment(slug, commentData) {
     try {
       const res = await fetch(`${API_BASE}/posts/${encodeURIComponent(slug)}/comments`, {
@@ -334,7 +409,7 @@ export const api = {
     };
   },
 
-  // 8. Update comment status (approve/reject)
+  // 9. Update comment status (approve/reject)
   async updateComment(slug, commentId, updates) {
     try {
       const res = await fetch(
@@ -372,7 +447,7 @@ export const api = {
     throw new Error('Comment not found');
   },
 
-  // 9. Delete comment
+  // 10. Delete comment
   async deleteComment(slug, commentId) {
     try {
       const res = await fetch(
@@ -402,7 +477,7 @@ export const api = {
     return { success: true, message: 'Comment deleted successfully' };
   },
 
-  // 10. Get all comments across all posts for Admin
+  // 11. Get all comments across all posts for Admin
   async getAllComments() {
     try {
       const res = await fetch(`${API_BASE}/comments/all`, {
@@ -437,7 +512,7 @@ export const api = {
     return { success: true, count: allComments.length, comments: allComments };
   },
 
-  // 11. Get all categories
+  // 12. Get all categories
   async getCategories() {
     try {
       const res = await fetch(`${API_BASE}/categories`, {
@@ -468,7 +543,7 @@ export const api = {
     return { success: true, count: categories.length, categories };
   },
 
-  // 12. Get CMS stats
+  // 13. Get CMS stats
   async getStats() {
     try {
       const res = await fetch(`${API_BASE}/stats`, {
@@ -510,7 +585,7 @@ export const api = {
     };
   },
 
-  // 13. Image upload with base64 Data URL fallback
+  // 14. Image upload with base64 Data URL fallback
   async uploadImage(file) {
     try {
       const formData = new FormData();

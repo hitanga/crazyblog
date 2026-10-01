@@ -52,27 +52,32 @@ export default function CategoryPage() {
           CATEGORY ARCHIVES
         </span>
         <h1 className="font-sans font-black text-3xl sm:text-4xl md:text-5xl text-stone-900 tracking-tight mt-1 capitalize">
-          {category}
+          {decodeURIComponent(category || '').replace(/-/g, ' ')}
         </h1>
         <p className="mt-2 text-xs text-stone-500">
-          Showing {posts.length} {posts.length === 1 ? 'article' : 'articles'} filed under {category}.
+          Showing {posts.length} {posts.length === 1 ? 'article' : 'articles'} filed under {decodeURIComponent(category || '').replace(/-/g, ' ')}.
         </p>
 
         {/* Other categories pills */}
         <div className="mt-6 flex flex-wrap items-center gap-2">
-          {categories.map((c) => (
-            <Link
-              key={c.name}
-              to={`/category/${c.name}`}
-              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider transition-colors ${
-                c.name.toLowerCase() === category.toLowerCase()
-                  ? 'bg-rose-600 text-white'
-                  : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
-              }`}
-            >
-              {c.name} ({c.count})
-            </Link>
-          ))}
+          {categories.map((c) => {
+            const isMatch =
+              c.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') ===
+              (category || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            return (
+              <Link
+                key={c.name}
+                to={`/category/${c.name.replace(/\s+/g, '-')}`}
+                className={`px-3 py-1 text-xs font-bold uppercase tracking-wider transition-colors ${
+                  isMatch
+                    ? 'bg-rose-600 text-white'
+                    : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                }`}
+              >
+                {c.name} ({c.count})
+              </Link>
+            );
+          })}
         </div>
       </div>
 

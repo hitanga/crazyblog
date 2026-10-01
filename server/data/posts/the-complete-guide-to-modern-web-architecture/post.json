@@ -1,0 +1,12 @@
+{
+  "id": "the-complete-guide-to-modern-web-architecture",
+  "title": "The Complete Guide to Modern Web Architecture",
+  "slug": "the-complete-guide-to-modern-web-architecture",
+  "excerpt": "A comprehensive reference exploring micro-frontends, edge computing, distributed caching, and zero-latency state synchronization for modern web platforms.",
+  "image": "/src/assets/images/hero_urban_avenue_1790847328166.jpg",
+  "category": "Knowledge Base",
+  "author": "Alexander Wright",
+  "date": "2026-10-01",
+  "featured": false,
+  "content": "<p>Modern web engineering demands high resilience, sub-second latency, and scalable state persistence. In this foundational knowledge base guide, we dissect the core architectural patterns powering 2026 applications.</p><h2>Core Pillars of Edge Computing</h2><p>Moving execution from centralized cloud hubs to decentralized edge runtimes reduces round-trip latency to single-digit milliseconds.</p><h3>Key System Design Patterns</h3><ol><li><strong>Edge Rewrites & Routing:</strong> Handling client-side single page applications cleanly on serverless CDNs without 404 drops.</li><li><strong>Hybrid Persistence:</strong> Pairing local client cache with distributed backend endpoints for offline-first capabilities.</li><li><strong>Optimistic UI Updates:</strong> Updating visual state immediately while background reconcilers synchronize with the source of truth.</li></ol>"
+}

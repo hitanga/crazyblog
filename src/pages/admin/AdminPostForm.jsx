@@ -265,9 +265,26 @@ export default function AdminPostForm() {
                 required
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                placeholder="e.g. Technology, Lifestyle, Travel"
+                placeholder="e.g. Horror Stories, Amazing Facts, Knowledge Base"
                 className="w-full bg-white border border-stone-300 px-3.5 py-2 text-xs text-stone-900 focus:outline-none focus:border-rose-600 rounded-none"
               />
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <span className="text-[10px] text-stone-400">Quick pick:</span>
+                {['Horror Stories', 'Amazing Facts', 'Knowledge Base'].map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, category: cat })}
+                    className={`text-[10px] px-2 py-0.5 font-semibold border transition-colors cursor-pointer ${
+                      formData.category === cat
+                        ? 'bg-rose-600 text-white border-rose-600'
+                        : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-stone-200'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

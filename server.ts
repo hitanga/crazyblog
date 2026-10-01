@@ -132,8 +132,12 @@ app.get('/api/posts', (req: Request, res: Response) => {
     const { category, search, featured } = req.query;
 
     if (category && typeof category === 'string' && category.toLowerCase() !== 'all') {
+      const catNorm = category.toLowerCase().replace(/[^a-z0-9]+/g, '-');
       posts = posts.filter(
-        (p) => p.category && p.category.toLowerCase() === category.toLowerCase()
+        (p) =>
+          p.category &&
+          (p.category.toLowerCase() === category.toLowerCase() ||
+            p.category.toLowerCase().replace(/[^a-z0-9]+/g, '-') === catNorm)
       );
     }
 
