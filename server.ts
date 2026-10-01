@@ -13,7 +13,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3000', 10);
+// AI Studio dev server must run on port 3000. In Cloud Run, process.env.PORT is 8080 (used by Nginx).
+const PORT = 3000;
 const isProd = process.env.NODE_ENV === 'production';
 
 // Ensure required directories exist
@@ -188,20 +189,38 @@ app.post('/api/posts', (req: Request, res: Response) => {
   try {
     const { title, slug, excerpt, image, category, author, date, content, featured } = req.body;
 
-    if (!title || !slug) {
-      return res.status(400).json({ success: false, message: 'Title and slug are required' });
+    if (!title || !title.trim()) {
+      return res.status(400).json({ success: false, message: 'Article title is required' });
     }
 
-    const cleanSlug = slug
+    let cleanSlug = (slug || '')
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9-]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
-    const postDir = path.join(DATA_DIR, cleanSlug);
+    if (!cleanSlug) {
+      cleanSlug = title
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }
 
+    if (!cleanSlug) {
+      cleanSlug = `post-${Date.now()}`;
+    }
+
+    let postDir = path.join(DATA_DIR, cleanSlug);
+
+    // If slug directory already exists, append unique suffix instead of failing
     if (fs.existsSync(postDir)) {
-      return res.status(409).json({ success: false, message: 'A post with this slug already exists' });
+      let counter = 1;
+      while (fs.existsSync(path.join(DATA_DIR, `${cleanSlug}-${counter}`))) {
+        counter++;
+      }
+      cleanSlug = `${cleanSlug}-${counter}`;
+      postDir = path.join(DATA_DIR, cleanSlug);
     }
 
     fs.mkdirSync(postDir, { recursive: true });
@@ -490,6 +509,17 @@ app.post('/api/upload', upload.single('image'), (req: Request, res: Response) =>
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
+});
+
+// Fallback for unmatched /api/* routes to guarantee JSON response
+app.all('/api/*', (_req: Request, res: Response) => {
+  res.status(404).json({ success: false, message: 'API route not found' });
+});
+
+// Global error handler
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('Server error:', err);
+  res.status(500).json({ success: false, message: err.message || 'Internal server error' });
 });
 
 // ========================

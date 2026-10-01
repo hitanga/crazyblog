@@ -121,18 +121,33 @@ export default function AdminPostForm() {
     setError('');
     setSuccess('');
 
-    if (!formData.title.trim() || !formData.slug.trim()) {
-      setError('Title and slug are required.');
+    const cleanTitle = formData.title.trim();
+    let cleanSlug = formData.slug.trim();
+    if (!cleanSlug && cleanTitle) {
+      cleanSlug = cleanTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }
+
+    if (!cleanTitle) {
+      setError('Article title is required.');
       return;
     }
+
+    const payload = {
+      ...formData,
+      title: cleanTitle,
+      slug: cleanSlug || `post-${Date.now()}`,
+    };
 
     setLoading(true);
     try {
       if (isEditing) {
-        await api.updatePost(editSlug, formData);
+        await api.updatePost(editSlug, payload);
         setSuccess('Post updated successfully!');
       } else {
-        await api.createPost(formData);
+        await api.createPost(payload);
         setSuccess('Post created successfully in server/data/posts!');
       }
 
