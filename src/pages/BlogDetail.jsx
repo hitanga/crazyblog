@@ -5,8 +5,9 @@ import CommentList from '../components/CommentList.jsx';
 import CommentForm from '../components/CommentForm.jsx';
 import SocialShare from '../components/SocialShare.jsx';
 import PostCard from '../components/PostCard.jsx';
-import { Loader2, ArrowLeft, Calendar, User, MessageCircle, Tag } from 'lucide-react';
+import { Loader2, ArrowLeft, Calendar, User, MessageCircle, Tag, Link2, Check, Globe } from 'lucide-react';
 import siteConfig from '../config/siteConfig.js';
+import { updatePageSEO, resetPageSEO } from '../utils/seo.js';
 
 export default function BlogDetail() {
   const { slug } = useParams();
@@ -15,6 +16,7 @@ export default function BlogDetail() {
   const [relatedPosts, setRelatedPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -39,14 +41,17 @@ export default function BlogDetail() {
           setPost(currentPost);
           setComments(commentsRes.comments || []);
 
-          // SEO dynamic head update
-          document.title = `${currentPost.title} — ${siteConfig.name}`;
-          const metaDesc = document.querySelector('meta[name="description"]');
-          if (metaDesc) metaDesc.setAttribute('content', currentPost.excerpt || '');
-          const ogTitle = document.querySelector('meta[property="og:title"]');
-          if (ogTitle) ogTitle.setAttribute('content', currentPost.title);
-          const ogDesc = document.querySelector('meta[property="og:description"]');
-          if (ogDesc) ogDesc.setAttribute('content', currentPost.excerpt || '');
+          // Dynamic SEO meta tags, canonical link, OpenGraph, Twitter card & JSON-LD
+          updatePageSEO({
+            title: currentPost.seoTitle || currentPost.title,
+            description: currentPost.seoDescription || currentPost.excerpt,
+            permalink: currentPost.seoPermalink || currentPost.slug,
+            image: currentPost.image,
+            category: currentPost.category,
+            author: currentPost.author,
+            date: currentPost.date,
+            keywords: currentPost.seoKeywords,
+          });
 
           // Filter related posts (same category, excluding current post)
           if (allPostsRes.success && allPostsRes.posts) {
@@ -82,6 +87,7 @@ export default function BlogDetail() {
 
     return () => {
       isMounted = false;
+      resetPageSEO();
     };
   }, [slug]);
 
@@ -172,6 +178,31 @@ export default function BlogDetail() {
             <MessageCircle className="w-3.5 h-3.5 text-stone-400" />
             <span>{comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}</span>
           </div>
+        </div>
+
+        {/* SEO Permalink & Canonical Link Copy */}
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const url = `${window.location.origin}/blog/${post.seoPermalink || post.slug}`;
+              if (navigator.clipboard) {
+                navigator.clipboard.writeText(url);
+                setCopiedLink(true);
+                setTimeout(() => setCopiedLink(false), 2500);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-50 hover:bg-stone-100 border border-stone-200 text-[11px] font-mono text-stone-600 transition-colors cursor-pointer"
+            title="Click to copy canonical SEO URL for Google sharing"
+          >
+            {copiedLink ? (
+              <Check className="w-3.5 h-3.5 text-emerald-600" />
+            ) : (
+              <Link2 className="w-3.5 h-3.5 text-rose-600" />
+            )}
+            <span className="font-semibold text-[10px] text-stone-400 uppercase tracking-wider">SEO Permalink:</span>
+            <span className="text-stone-800">{copiedLink ? 'Copied to clipboard!' : `/blog/${post.seoPermalink || post.slug}`}</span>
+          </button>
         </div>
       </header>
 

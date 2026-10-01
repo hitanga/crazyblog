@@ -166,19 +166,37 @@ app.get('/api/posts', (req: Request, res: Response) => {
 app.get('/api/posts/:slug', (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
-    const postFilePath = path.join(DATA_DIR, slug, 'post.json');
+    let postFilePath = path.join(DATA_DIR, slug, 'post.json');
+    let actualSlug = slug;
+
+    // If direct folder path not found, search posts for matching seoPermalink or slug
+    if (!fs.existsSync(postFilePath)) {
+      const allPosts = getAllPostsData();
+      const matched = allPosts.find(
+        (p) => p.slug === slug || p.seoPermalink === slug || p.id === slug
+      );
+      if (matched) {
+        actualSlug = matched.slug;
+        postFilePath = path.join(DATA_DIR, actualSlug, 'post.json');
+      }
+    }
+
     if (!fs.existsSync(postFilePath)) {
       return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
     const post = JSON.parse(fs.readFileSync(postFilePath, 'utf-8'));
-    const comments = getCommentsForPost(slug);
+    const comments = getCommentsForPost(actualSlug);
     const approvedComments = comments.filter((c: any) => c.approved);
 
     res.json({
       success: true,
       post: {
         ...post,
+        seoTitle: post.seoTitle || post.title,
+        seoPermalink: post.seoPermalink || post.slug,
+        seoDescription: post.seoDescription || post.excerpt || '',
+        seoKeywords: post.seoKeywords || '',
         commentsCount: approvedComments.length,
         totalCommentsCount: comments.length,
       },
@@ -191,13 +209,28 @@ app.get('/api/posts/:slug', (req: Request, res: Response) => {
 // 3. POST /api/posts - Create new post
 app.post('/api/posts', (req: Request, res: Response) => {
   try {
-    const { title, slug, excerpt, image, category, author, date, content, featured } = req.body;
+    const {
+      title,
+      slug,
+      excerpt,
+      image,
+      category,
+      author,
+      date,
+      content,
+      featured,
+      seoTitle,
+      seoPermalink,
+      seoDescription,
+      seoKeywords,
+    } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ success: false, message: 'Article title is required' });
     }
 
-    let cleanSlug = (slug || '')
+    const permalinkInput = seoPermalink || slug;
+    let cleanSlug = (permalinkInput || '')
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9-]+/g, '-')
@@ -240,6 +273,10 @@ app.post('/api/posts', (req: Request, res: Response) => {
       date: date || new Date().toISOString().split('T')[0],
       content: content || '<p>Write your story here...</p>',
       featured: Boolean(featured),
+      seoTitle: (seoTitle || '').trim() || title.trim(),
+      seoPermalink: cleanSlug,
+      seoDescription: (seoDescription !== undefined ? seoDescription : (excerpt || '')).trim(),
+      seoKeywords: (seoKeywords || '').trim(),
     };
 
     fs.writeFileSync(path.join(postDir, 'post.json'), JSON.stringify(newPost, null, 2), 'utf-8');
@@ -261,9 +298,24 @@ app.put('/api/posts/:slug', (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
-    const { title, slug: newSlugInput, excerpt, image, category, author, date, content, featured } = req.body;
+    const {
+      title,
+      slug: newSlugInput,
+      excerpt,
+      image,
+      category,
+      author,
+      date,
+      content,
+      featured,
+      seoTitle,
+      seoPermalink,
+      seoDescription,
+      seoKeywords,
+    } = req.body;
 
-    const newSlug = (newSlugInput || slug)
+    const desiredSlug = seoPermalink || newSlugInput || slug;
+    const newSlug = desiredSlug
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9-]+/g, '-')
@@ -275,7 +327,7 @@ app.put('/api/posts/:slug', (req: Request, res: Response) => {
     if (newSlug !== slug) {
       targetDir = path.join(DATA_DIR, newSlug);
       if (fs.existsSync(targetDir)) {
-        return res.status(409).json({ success: false, message: 'Target slug already in use' });
+        return res.status(409).json({ success: false, message: 'Target slug or permalink already in use' });
       }
       fs.renameSync(oldDir, targetDir);
     }
@@ -302,6 +354,10 @@ app.put('/api/posts/:slug', (req: Request, res: Response) => {
       date: date || (existingPost as any).date || new Date().toISOString().split('T')[0],
       content: content !== undefined ? content : (existingPost as any).content,
       featured: featured !== undefined ? Boolean(featured) : (existingPost as any).featured,
+      seoTitle: seoTitle !== undefined ? seoTitle.trim() : ((existingPost as any).seoTitle || (title ? title.trim() : (existingPost as any).title)),
+      seoPermalink: newSlug,
+      seoDescription: seoDescription !== undefined ? seoDescription.trim() : ((existingPost as any).seoDescription || (excerpt !== undefined ? excerpt.trim() : (existingPost as any).excerpt || '')),
+      seoKeywords: seoKeywords !== undefined ? seoKeywords.trim() : ((existingPost as any).seoKeywords || ''),
     };
 
     fs.writeFileSync(postFilePath, JSON.stringify(updatedPost, null, 2), 'utf-8');

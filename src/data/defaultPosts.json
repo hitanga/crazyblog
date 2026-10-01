@@ -19,7 +19,11 @@
         "date": "2026-10-01",
         "approved": true
       }
-    ]
+    ],
+    "seoTitle": "The Whispers of Blackwood Manor",
+    "seoPermalink": "the-whispers-of-blackwood-manor",
+    "seoDescription": "Deep within the fog-shrouded valleys of New England lies Blackwood Manor, an 18th-century estate where time stands still and footsteps echo from empty corridors.",
+    "seoKeywords": "Horror Stories, blog, crazyblog"
   },
   {
     "id": "10-mind-blowing-mysteries-of-the-deep-ocean",
@@ -41,7 +45,11 @@
         "date": "2026-10-01",
         "approved": true
       }
-    ]
+    ],
+    "seoTitle": "10 Mind-Blowing Mysteries of the Deep Ocean",
+    "seoPermalink": "10-mind-blowing-mysteries-of-the-deep-ocean",
+    "seoDescription": "More than eighty percent of Earth's oceans remain completely unexplored. Here are ten staggering scientific facts about the abyssal depths that defy imagination.",
+    "seoKeywords": "Amazing Facts, blog, crazyblog"
   },
   {
     "id": "the-complete-guide-to-modern-web-architecture",
@@ -63,6 +71,10 @@
         "date": "2026-10-01",
         "approved": true
       }
-    ]
+    ],
+    "seoTitle": "The Complete Guide to Modern Web Architecture",
+    "seoPermalink": "the-complete-guide-to-modern-web-architecture",
+    "seoDescription": "A comprehensive reference exploring micro-frontends, edge computing, distributed caching, and zero-latency state synchronization for modern web platforms.",
+    "seoKeywords": "Knowledge Base, blog, crazyblog"
   }
 ]

@@ -157,14 +157,19 @@ export const api = {
     }
 
     const posts = getLocalPosts();
-    const post = posts.find((p) => (p.slug === slug || p.id === slug) && !deleted.includes(p.slug));
+    const post = posts.find(
+      (p) =>
+        (p.slug === slug || p.seoPermalink === slug || p.id === slug) &&
+        !deleted.includes(p.slug)
+    );
     if (!post) return null;
     return { success: true, post };
   },
 
   // 3. Create new post
   async createPost(data) {
-    let cleanSlug = (data.slug || '')
+    const permalinkInput = data.seoPermalink || data.slug;
+    let cleanSlug = (permalinkInput || '')
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9-]+/g, '-')
@@ -182,6 +187,10 @@ export const api = {
       ...data,
       title: (data.title || '').trim(),
       slug: cleanSlug || `post-${Date.now()}`,
+      seoTitle: (data.seoTitle || data.title || '').trim(),
+      seoPermalink: (data.seoPermalink || cleanSlug || '').trim(),
+      seoDescription: (data.seoDescription !== undefined ? data.seoDescription : data.excerpt || '').trim(),
+      seoKeywords: (data.seoKeywords || '').trim(),
     };
 
     // If this slug was in deleted ledger, remove it because user is explicitly creating a new post with it
@@ -233,6 +242,10 @@ export const api = {
       date: payload.date || new Date().toISOString().split('T')[0],
       content: payload.content || '<p>Write your story here...</p>',
       featured: Boolean(payload.featured),
+      seoTitle: payload.seoTitle || payload.title,
+      seoPermalink: finalSlug,
+      seoDescription: payload.seoDescription || payload.excerpt || '',
+      seoKeywords: payload.seoKeywords || '',
       comments: [],
     };
 
@@ -276,6 +289,10 @@ export const api = {
       ...data,
       title: data.title ? data.title.trim() : posts[index].title,
       slug: data.slug || posts[index].slug,
+      seoTitle: data.seoTitle !== undefined ? data.seoTitle.trim() : posts[index].seoTitle || posts[index].title,
+      seoPermalink: data.seoPermalink !== undefined ? data.seoPermalink.trim() : posts[index].seoPermalink || posts[index].slug,
+      seoDescription: data.seoDescription !== undefined ? data.seoDescription.trim() : posts[index].seoDescription || posts[index].excerpt || '',
+      seoKeywords: data.seoKeywords !== undefined ? data.seoKeywords.trim() : posts[index].seoKeywords || '',
     };
 
     posts[index] = updatedPost;
