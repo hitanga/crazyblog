@@ -1,0 +1,26 @@
+[
+  {
+    "id": "c-501",
+    "name": "Jean-Luc Moreau",
+    "email": "jeanluc@vogueparis.fr",
+    "comment": "Superb monochrome tonality. The coat silhouette against the bridge stone is timeless.",
+    "date": "2026-09-11",
+    "approved": true
+  },
+  {
+    "id": "c-502",
+    "name": "Chloe Bennett",
+    "email": "chloe@couture.com",
+    "comment": "The quote on restraint is going straight into my studio inspiration board.",
+    "date": "2026-09-12",
+    "approved": true
+  },
+  {
+    "id": "c-503",
+    "name": "Alex Morgan",
+    "email": "alex@drafts.dev",
+    "comment": "Submitting a comment for review on reactive systems.",
+    "date": "2026-09-14",
+    "approved": false
+  }
+]

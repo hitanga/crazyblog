@@ -1,0 +1,18 @@
+[
+  {
+    "id": "c-401",
+    "name": "Greta Thorn",
+    "email": "greta@nordic.se",
+    "comment": "The serene composition of this shot brings back memories of our trek through Sognefjord.",
+    "date": "2026-09-16",
+    "approved": true
+  },
+  {
+    "id": "c-402",
+    "name": "Samir Patel",
+    "email": "samir@nomads.io",
+    "comment": "The red badge indicator on the editorial layout looks so sharp with the mist image.",
+    "date": "2026-09-17",
+    "approved": true
+  }
+]

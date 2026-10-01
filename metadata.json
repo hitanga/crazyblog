@@ -1,0 +1,6 @@
+{
+  "name": "GutenVerse - Magazine & Editorial Blog CMS",
+  "description": "An editorial magazine and blog publication with full JSON file-based CMS, Firebase authentication, and comment management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

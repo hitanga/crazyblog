@@ -1,0 +1,18 @@
+[
+  {
+    "id": "comment-001",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "comment": "Great article! The explanation of JSON file storage combined with React hooks was super intuitive.",
+    "date": "2026-10-01",
+    "approved": true
+  },
+  {
+    "id": "comment-002",
+    "name": "Sarah Connor",
+    "email": "sarah@cyberdyne.org",
+    "comment": "Clean structure and love the editorial look of this blog template.",
+    "date": "2026-10-01",
+    "approved": true
+  }
+]
