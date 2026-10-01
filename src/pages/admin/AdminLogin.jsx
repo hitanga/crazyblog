@@ -62,7 +62,7 @@ export default function AdminLogin() {
   };
 
   const handleQuickDemoFill = () => {
-    setEmail('admin@gutenverse.com');
+    setEmail('admin@crazyblog.com');
     setPassword('admin123');
   };
 

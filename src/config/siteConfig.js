@@ -1,9 +1,9 @@
-// Site configuration for GutenVerse Magazine & Blog CMS
+// Site configuration for CrazyBlog
 const siteConfig = {
-  name: "GUTENVERSE",
-  tagline: "MULTIPURPOSE MAGAZINE AND BLOG THEME",
-  description: "A modern, responsive editorial magazine and blog powered by JSON CMS and React.",
-  author: "Editorial Board",
+  name: "CrazyBlog",
+  tagline: "HORROR STORIES • AMAZING FACTS • KNOWLEDGE BASE",
+  description: "CrazyBlog is an electrifying digital journal sharing bone-chilling horror stories, mind-blowing facts, and insightful knowledge base guides.",
+  author: "CrazyBlog Editorial Board",
   socialLinks: [
     { name: "Facebook", icon: "facebook", url: "https://facebook.com" },
     { name: "Twitter", icon: "twitter", url: "https://twitter.com" },

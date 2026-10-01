@@ -1,4 +1,4 @@
-// Navigation configuration for GutenVerse Magazine & Blog
+// Navigation configuration for CrazyBlog Magazine & Editorial Platform
 const navigation = [
   {
     label: "HOME",

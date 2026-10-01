@@ -32,7 +32,7 @@ export default function FeaturesPage() {
     {
       icon: <Smartphone className="w-5 h-5 text-rose-600" />,
       title: "Responsive Editorial Design",
-      description: "Precision-engineered light theme matching the GutenVerse magazine aesthetic: 3-column desktop grid, bold typography, and coral accents."
+      description: "Precision-engineered light theme matching the CrazyBlog magazine aesthetic: high-contrast layout, bold typography, and coral accents."
     }
   ];
 

@@ -50,8 +50,8 @@ export default function AdminLayout() {
               {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
             <Link to="/admin/dashboard" className="flex items-center gap-2">
-              <span className="font-sans font-black tracking-tight text-lg uppercase text-stone-900">
-                {siteConfig.name} <span className="text-rose-600 text-xs font-bold tracking-widest ml-1 px-1.5 py-0.5 bg-rose-50 border border-rose-200">CMS</span>
+              <span className="font-sans font-black tracking-tight text-lg text-stone-900">
+                Crazy<span className="text-rose-600">Blog</span> <span className="text-rose-600 text-xs font-bold tracking-widest ml-1 px-1.5 py-0.5 bg-rose-50 border border-rose-200">CMS</span>
               </span>
             </Link>
           </div>
@@ -72,7 +72,7 @@ export default function AdminLayout() {
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
                 <span className="block text-xs font-bold text-stone-900 truncate max-w-[160px]">
-                  {user?.email || 'admin@gutenverse.com'}
+                  {user?.email || 'admin@crazyblog.com'}
                 </span>
                 <span className="block text-[10px] text-stone-400 uppercase tracking-wider font-semibold">
                   {isLiveFirebase ? 'Firebase Auth' : 'Admin Session'}

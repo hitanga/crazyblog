@@ -10,15 +10,16 @@ export default function Footer() {
           {/* Brand info */}
           <div className="lg:col-span-6">
             <div className="text-left">
-              <span className="font-sans font-black tracking-tight text-3xl uppercase text-white block">
-                {siteConfig.name}
+              <span className="font-sans font-black tracking-tight text-3xl text-white block">
+                <span>Crazy</span>
+                <span className="text-rose-500">Blog</span>
               </span>
-              <span className="mt-1 text-[10px] tracking-[0.22em] font-medium text-stone-400 uppercase block">
+              <span className="mt-1 text-[10px] tracking-[0.22em] font-bold text-stone-400 uppercase block">
                 {siteConfig.tagline}
               </span>
             </div>
             <p className="mt-4 text-xs sm:text-sm text-stone-400 leading-relaxed max-w-md">
-              An independent digital journal dedicated to architecture, technology, travel essays, and contemporary visual culture. Built with React and an isolated JSON-filesystem CMS backend.
+              CrazyBlog is an electrifying digital journal sharing captivating horror stories, mind-boggling scientific facts, and comprehensive knowledge base guides.
             </p>
           </div>
 
