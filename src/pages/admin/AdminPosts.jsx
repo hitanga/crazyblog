@@ -51,11 +51,13 @@ export default function AdminPosts() {
     setIsDeleting(true);
     try {
       await api.deletePost(deleteModal.slug);
-      const remaining = posts.filter((p) => p.slug !== deleteModal.slug);
+      const remaining = posts.filter(
+        (p) => p.slug !== deleteModal.slug && p.id !== deleteModal.slug
+      );
       setPosts(remaining);
-      setSuccessMessage(`"${deleteModal.title}" was permanently deleted and will never reappear.`);
+      setSuccessMessage(`"${deleteModal.title}" was deleted permanently.`);
       setDeleteModal({ open: false, slug: '', title: '' });
-      setTimeout(() => setSuccessMessage(null), 5000);
+      setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err) {
       alert(`Failed to delete post: ${err.message}`);
     } finally {
@@ -66,13 +68,13 @@ export default function AdminPosts() {
   const handleClearDemoPosts = async () => {
     setIsDeleting(true);
     try {
-      await api.deleteAllDefaultPosts();
+      await api.deleteAllPosts();
       await loadData();
       setDemoModalOpen(false);
-      setSuccessMessage('All old default demo posts have been permanently removed!');
-      setTimeout(() => setSuccessMessage(null), 5000);
+      setSuccessMessage('All blog posts have been cleared! You now have a clean slate.');
+      setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err) {
-      alert(`Failed to clear demo posts: ${err.message}`);
+      alert(`Failed to clear posts: ${err.message}`);
     } finally {
       setIsDeleting(false);
     }
@@ -174,13 +176,23 @@ export default function AdminPosts() {
           <Loader2 className="w-8 h-8 animate-spin text-rose-600" />
         </div>
       ) : filteredPosts.length === 0 ? (
-        <div className="bg-white p-12 text-center border border-stone-200 space-y-3">
-          <p className="text-sm font-semibold text-stone-800">No blog posts found.</p>
-          <p className="text-xs text-stone-500">
-            {searchTerm || selectedCategory !== 'All'
-              ? 'Try changing your search query or category filter.'
-              : 'Create your first article using the "New Article" button above.'}
-          </p>
+        <div className="bg-white p-12 text-center border border-stone-200 space-y-4">
+          <div className="w-12 h-12 bg-rose-50 border border-rose-200 text-rose-600 mx-auto flex items-center justify-center">
+            <PlusCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-stone-900">Your Blog Has 0 Posts</h3>
+            <p className="text-xs text-stone-500 max-w-md mx-auto mt-1">
+              You are starting completely fresh with zero default posts. Create your first original blog article below to get started!
+            </p>
+          </div>
+          <Link
+            to="/admin/posts/create"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-xs"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Create Your First Blog Post</span>
+          </Link>
         </div>
       ) : (
         <div className="bg-white border border-stone-200 overflow-x-auto">

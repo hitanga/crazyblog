@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import HeroPost from '../components/HeroPost.jsx';
 import LatestStories from '../components/LatestStories.jsx';
 import StaffPicks from '../components/StaffPicks.jsx';
 import api from '../services/api.js';
-import { Loader2 } from 'lucide-react';
+import { Loader2, PlusCircle, Sparkles } from 'lucide-react';
 
 export default function Home() {
   const [posts, setPosts] = useState([]);
@@ -55,6 +56,39 @@ export default function Home() {
         >
           Retry
         </button>
+      </div>
+    );
+  }
+
+  // Clean-slate state when blog has zero posts
+  if (posts.length === 0) {
+    return (
+      <div className="w-full max-w-[1240px] mx-auto px-4 sm:px-6 py-20 text-center">
+        <div className="max-w-lg mx-auto p-10 bg-white border border-stone-200 shadow-sm space-y-4">
+          <div className="w-14 h-14 bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
+            <Sparkles className="w-7 h-7" />
+          </div>
+          <div>
+            <span className="text-[11px] font-bold tracking-[0.24em] text-rose-600 uppercase block mb-1">
+              CLEAN SLATE PUBLICATION
+            </span>
+            <h2 className="font-sans font-black text-2xl sm:text-3xl text-stone-900 tracking-tight">
+              Ready for Your Stories
+            </h2>
+            <p className="text-xs sm:text-sm text-stone-600 leading-relaxed max-w-md mx-auto mt-2">
+              All demo posts have been removed. Your CrazyBlog platform is ready for your original horror tales, amazing facts, and knowledge base guides.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Link
+              to="/admin/posts/create"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-stone-900 hover:bg-rose-600 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-xs"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Create Your First Article</span>
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }

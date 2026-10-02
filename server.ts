@@ -292,7 +292,17 @@ app.post('/api/posts', (req: Request, res: Response) => {
 app.put('/api/posts/:slug', (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
-    const oldDir = path.join(DATA_DIR, slug);
+    let oldDir = path.join(DATA_DIR, slug);
+
+    if (!fs.existsSync(oldDir)) {
+      const allPosts = getAllPostsData();
+      const matched = allPosts.find(
+        (p) => p.slug === slug || p.id === slug || p.seoPermalink === slug
+      );
+      if (matched) {
+        oldDir = path.join(DATA_DIR, matched.slug || matched.id);
+      }
+    }
 
     if (!fs.existsSync(oldDir)) {
       return res.status(404).json({ success: false, message: 'Post not found' });
@@ -323,13 +333,16 @@ app.put('/api/posts/:slug', (req: Request, res: Response) => {
 
     let targetDir = oldDir;
 
-    // Handle slug change
-    if (newSlug !== slug) {
+    // Handle slug change if user updated it to a different valid slug
+    const currentFolderName = path.basename(oldDir);
+    if (newSlug && newSlug !== currentFolderName) {
       targetDir = path.join(DATA_DIR, newSlug);
-      if (fs.existsSync(targetDir)) {
-        return res.status(409).json({ success: false, message: 'Target slug or permalink already in use' });
+      if (fs.existsSync(targetDir) && targetDir !== oldDir) {
+        // If collision, keep current folder or append timestamp
+        targetDir = oldDir;
+      } else {
+        fs.renameSync(oldDir, targetDir);
       }
-      fs.renameSync(oldDir, targetDir);
     }
 
     const postFilePath = path.join(targetDir, 'post.json');
@@ -342,11 +355,12 @@ app.put('/api/posts/:slug', (req: Request, res: Response) => {
       }
     }
 
+    const finalSlug = path.basename(targetDir);
     const updatedPost = {
       ...existingPost,
-      id: newSlug,
+      id: finalSlug,
       title: title ? title.trim() : (existingPost as any).title,
-      slug: newSlug,
+      slug: finalSlug,
       excerpt: excerpt !== undefined ? excerpt.trim() : (existingPost as any).excerpt,
       image: image || (existingPost as any).image,
       category: category || (existingPost as any).category || 'General',
@@ -355,7 +369,7 @@ app.put('/api/posts/:slug', (req: Request, res: Response) => {
       content: content !== undefined ? content : (existingPost as any).content,
       featured: featured !== undefined ? Boolean(featured) : (existingPost as any).featured,
       seoTitle: seoTitle !== undefined ? seoTitle.trim() : ((existingPost as any).seoTitle || (title ? title.trim() : (existingPost as any).title)),
-      seoPermalink: newSlug,
+      seoPermalink: finalSlug,
       seoDescription: seoDescription !== undefined ? seoDescription.trim() : ((existingPost as any).seoDescription || (excerpt !== undefined ? excerpt.trim() : (existingPost as any).excerpt || '')),
       seoKeywords: seoKeywords !== undefined ? seoKeywords.trim() : ((existingPost as any).seoKeywords || ''),
     };
@@ -368,11 +382,39 @@ app.put('/api/posts/:slug', (req: Request, res: Response) => {
   }
 });
 
-// 5. DELETE /api/posts/:slug - Delete post & comments
+// 5. DELETE /api/posts - Delete all posts (clear slate)
+app.delete('/api/posts', (_req: Request, res: Response) => {
+  try {
+    if (fs.existsSync(DATA_DIR)) {
+      const entries = fs.readdirSync(DATA_DIR);
+      for (const entry of entries) {
+        const fullPath = path.join(DATA_DIR, entry);
+        if (fs.statSync(fullPath).isDirectory()) {
+          fs.rmSync(fullPath, { recursive: true, force: true });
+        }
+      }
+    }
+    res.json({ success: true, message: 'All posts deleted successfully' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 6. DELETE /api/posts/:slug - Delete single post & comments
 app.delete('/api/posts/:slug', (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
-    const postDir = path.join(DATA_DIR, slug);
+    let postDir = path.join(DATA_DIR, slug);
+
+    if (!fs.existsSync(postDir)) {
+      const allPosts = getAllPostsData();
+      const matched = allPosts.find(
+        (p) => p.slug === slug || p.id === slug || p.seoPermalink === slug
+      );
+      if (matched) {
+        postDir = path.join(DATA_DIR, matched.slug || matched.id);
+      }
+    }
 
     if (!fs.existsSync(postDir)) {
       return res.status(404).json({ success: false, message: 'Post not found' });
