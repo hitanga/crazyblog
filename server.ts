@@ -618,22 +618,185 @@ app.all('/api/*', (_req: Request, res: Response) => {
   res.status(404).json({ success: false, message: 'API route not found' });
 });
 
+// Helper to find a post by slug, id, or seoPermalink
+function findPostBySlugOrPermalink(slug: string) {
+  const allPosts = getAllPostsData();
+  return (
+    allPosts.find((p) => p.slug === slug || p.id === slug || p.seoPermalink === slug) || null
+  );
+}
+
 // Global error handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Server error:', err);
   res.status(500).json({ success: false, message: err.message || 'Internal server error' });
 });
 
+// Static assets route for images
+app.use('/src/assets', express.static(path.resolve(__dirname, 'src/assets')));
+
+// Helper to escape HTML attributes safely
+function escapeHtmlAttr(str: string) {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// Generate social and Google SEO HTML with OpenGraph and Twitter cards for /blog/:slug
+async function generatePostHtml(req: Request, post: any, viteInstance?: any) {
+  const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
+  const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'localhost:3000';
+  const baseUrl = `${protocol}://${host}`;
+
+  const postSlug = post.seoPermalink || post.slug;
+  const canonicalUrl = `${baseUrl}/blog/${postSlug}`;
+
+  let fullImageUrl = post.image || '/src/assets/images/hero_urban_avenue_1790847328166.jpg';
+  if (!fullImageUrl.startsWith('http://') && !fullImageUrl.startsWith('https://')) {
+    fullImageUrl = `${baseUrl}${fullImageUrl.startsWith('/') ? '' : '/'}${fullImageUrl}`;
+  }
+
+  const postTitle = (post.seoTitle || post.title || 'CrazyBlog Article').trim();
+  const siteTitle = `${postTitle} — CrazyBlog`;
+  const postDesc = (post.seoDescription || post.excerpt || 'Read the full story on CrazyBlog.').trim();
+  const postAuthor = post.author || 'Admin';
+  const postDate = post.date || new Date().toISOString().split('T')[0];
+  const postCategory = post.category || 'General';
+  const postKeywords = post.seoKeywords || `${postCategory}, CrazyBlog`;
+
+  const templatePath = isProd
+    ? path.resolve(__dirname, 'dist/index.html')
+    : path.resolve(__dirname, 'index.html');
+
+  let template = fs.readFileSync(templatePath, 'utf-8');
+
+  if (viteInstance && !isProd) {
+    template = await viteInstance.transformIndexHtml(req.originalUrl, template);
+  }
+
+  const escTitle = escapeHtmlAttr(postTitle);
+  const escSiteTitle = escapeHtmlAttr(siteTitle);
+  const escDesc = escapeHtmlAttr(postDesc);
+  const escImg = escapeHtmlAttr(fullImageUrl);
+  const escUrl = escapeHtmlAttr(canonicalUrl);
+  const escKeywords = escapeHtmlAttr(postKeywords);
+  const escAuthor = escapeHtmlAttr(postAuthor);
+  const escCategory = escapeHtmlAttr(postCategory);
+
+  const jsonLd = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: postTitle,
+    description: postDesc,
+    image: [fullImageUrl],
+    url: canonicalUrl,
+    datePublished: postDate,
+    author: {
+      '@type': 'Person',
+      name: postAuthor,
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'CrazyBlog',
+      logo: {
+        '@type': 'ImageObject',
+        url: `${baseUrl}/favicon.svg`,
+      },
+    },
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': canonicalUrl,
+    },
+  });
+
+  const injectedTags = `
+    <!-- Dynamically Injected Social Sharing & Google SEO Tags -->
+    <title>${escSiteTitle}</title>
+    <meta name="description" content="${escDesc}" />
+    <meta name="keywords" content="${escKeywords}" />
+    <meta name="author" content="${escAuthor}" />
+    <link rel="canonical" href="${escUrl}" />
+
+    <!-- OpenGraph Tags (Facebook, WhatsApp, LinkedIn, Discord, Telegram, Slack) -->
+    <meta property="og:site_name" content="CrazyBlog" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="${escTitle}" />
+    <meta property="og:description" content="${escDesc}" />
+    <meta property="og:image" content="${escImg}" />
+    <meta property="og:image:secure_url" content="${escImg}" />
+    <meta property="og:image:alt" content="${escTitle}" />
+    <meta property="og:url" content="${escUrl}" />
+    <meta property="article:published_time" content="${postDate}" />
+    <meta property="article:author" content="${escAuthor}" />
+    <meta property="article:section" content="${escCategory}" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escTitle}" />
+    <meta name="twitter:description" content="${escDesc}" />
+    <meta name="twitter:image" content="${escImg}" />
+    <meta name="twitter:image:alt" content="${escTitle}" />
+
+    <!-- Schema.org JSON-LD Structured Data -->
+    <script type="application/ld+json" id="crazyblog-article-jsonld">
+${jsonLd}
+    </script>
+`;
+
+  let html = template
+    .replace(/<title>.*?<\/title>/is, '')
+    .replace(/<meta\s+name=["']description["'].*?>/is, '')
+    .replace(/<meta\s+property=["']og:title["'].*?>/is, '')
+    .replace(/<meta\s+property=["']og:description["'].*?>/is, '')
+    .replace(/<meta\s+property=["']og:type["'].*?>/is, '')
+    .replace(/<meta\s+name=["']twitter:card["'].*?>/is, '');
+
+  return html.replace('</head>', `${injectedTags}\n  </head>`);
+}
+
 // ========================
 // VITE MIDDLEWARE / STATIC
 // ========================
 async function startServer() {
+  let vite: any = null;
+
   if (!isProd) {
-    const vite = await createViteServer({
+    vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa',
+      appType: 'custom',
     });
+  }
+
+  // Intercept /blog/:slug to inject real OpenGraph social sharing meta tags
+  app.get('/blog/:slug', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { slug } = req.params;
+      const post = findPostBySlugOrPermalink(slug);
+      if (post) {
+        const html = await generatePostHtml(req, post, vite);
+        return res.status(200).set({ 'Content-Type': 'text/html; charset=utf-8' }).send(html);
+      }
+      next();
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  if (!isProd && vite) {
     app.use(vite.middlewares);
+    app.get('*', async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
+        const html = await vite.transformIndexHtml(req.originalUrl, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).send(html);
+      } catch (e) {
+        vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   } else {
     const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));

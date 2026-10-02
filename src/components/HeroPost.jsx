@@ -12,6 +12,13 @@ export default function HeroPost({ post }) {
       }).toUpperCase()
     : 'OCTOBER 1, 2026';
 
+  const commentsTotal =
+    typeof post.commentsCount === 'number'
+      ? post.commentsCount
+      : Array.isArray(post.comments)
+      ? post.comments.length
+      : 0;
+
   return (
     <section className="w-full max-w-[1240px] mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-12">
       <div className="relative bg-[#1a1c1e] overflow-hidden min-h-[460px] sm:min-h-[520px] lg:min-h-[560px] flex items-center shadow-sm">
@@ -36,7 +43,7 @@ export default function HeroPost({ post }) {
               <span className="text-stone-300">•</span>
               <span className="text-rose-600 font-extrabold">FEATURED</span>
               <span className="text-stone-300">•</span>
-              <span>{post.commentsCount ?? 4} COMMENTS</span>
+              <span>{commentsTotal} {commentsTotal === 1 ? 'COMMENT' : 'COMMENTS'}</span>
             </div>
 
             {/* Coral accent line */}

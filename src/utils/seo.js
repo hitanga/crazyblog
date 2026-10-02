@@ -1,4 +1,4 @@
-// Utility to dynamically manage document head tags, OpenGraph, Twitter Cards, Canonical links, and JSON-LD structured data for Google SEO
+// Utility to dynamically manage document head tags, OpenGraph, Twitter Cards, Canonical links, and JSON-LD structured data for Google SEO & Social Sharing
 import siteConfig from '../config/siteConfig.js';
 
 export function updatePageSEO({
@@ -13,6 +13,7 @@ export function updatePageSEO({
   type = 'article',
 }) {
   const siteUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const postTitle = title || siteConfig.name;
   const finalTitle = title ? `${title} — ${siteConfig.name}` : `${siteConfig.name} - ${siteConfig.tagline}`;
   const finalDesc = description || siteConfig.description;
   const canonicalUrl = permalink
@@ -20,11 +21,13 @@ export function updatePageSEO({
     : typeof window !== 'undefined'
     ? window.location.href
     : '';
-  const finalImage = image
-    ? image.startsWith('http')
-      ? image
-      : `${siteUrl}${image}`
-    : `${siteUrl}/src/assets/images/hero_urban_avenue_1790847328166.jpg`;
+
+  let finalImage = image;
+  if (!finalImage) {
+    finalImage = `${siteUrl}/src/assets/images/hero_urban_avenue_1790847328166.jpg`;
+  } else if (!finalImage.startsWith('http://') && !finalImage.startsWith('https://')) {
+    finalImage = `${siteUrl}${finalImage.startsWith('/') ? '' : '/'}${finalImage}`;
+  }
 
   // 1. Update Document Title
   document.title = finalTitle;
@@ -46,6 +49,9 @@ export function updatePageSEO({
   if (keywords) {
     setMetaTag('name', 'keywords', keywords);
   }
+  if (author) {
+    setMetaTag('name', 'author', author);
+  }
 
   // 3. Canonical Link
   let canonicalLink = document.querySelector('link[rel="canonical"]');
@@ -56,22 +62,25 @@ export function updatePageSEO({
   }
   canonicalLink.setAttribute('href', canonicalUrl);
 
-  // 4. OpenGraph Tags (Facebook, LinkedIn, Discord)
+  // 4. OpenGraph Tags (Facebook, WhatsApp, LinkedIn, Discord, Telegram, Slack, iMessage)
   setMetaTag('property', 'og:site_name', siteConfig.name);
-  setMetaTag('property', 'og:title', title || siteConfig.name);
+  setMetaTag('property', 'og:title', postTitle);
   setMetaTag('property', 'og:description', finalDesc);
   setMetaTag('property', 'og:url', canonicalUrl);
   setMetaTag('property', 'og:type', type);
   setMetaTag('property', 'og:image', finalImage);
+  setMetaTag('property', 'og:image:secure_url', finalImage);
+  setMetaTag('property', 'og:image:alt', postTitle);
   if (date) setMetaTag('property', 'article:published_time', date);
   if (author) setMetaTag('property', 'article:author', author);
   if (category) setMetaTag('property', 'article:section', category);
 
   // 5. Twitter / X Cards
   setMetaTag('name', 'twitter:card', 'summary_large_image');
-  setMetaTag('name', 'twitter:title', title || siteConfig.name);
+  setMetaTag('name', 'twitter:title', postTitle);
   setMetaTag('name', 'twitter:description', finalDesc);
   setMetaTag('name', 'twitter:image', finalImage);
+  setMetaTag('name', 'twitter:image:alt', postTitle);
 
   // 6. Schema.org JSON-LD Structured Data
   const jsonLdId = 'crazyblog-jsonld-schema';
@@ -86,7 +95,7 @@ export function updatePageSEO({
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': type === 'article' ? 'BlogPosting' : 'WebSite',
-    headline: title || siteConfig.name,
+    headline: postTitle,
     description: finalDesc,
     image: [finalImage],
     url: canonicalUrl,

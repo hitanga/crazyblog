@@ -242,7 +242,11 @@ export default function BlogDetail() {
         />
 
         {/* Social Sharing */}
-        <SocialShare title={post.title} />
+        <SocialShare
+          title={post.seoTitle || post.title}
+          description={post.seoDescription || post.excerpt}
+          url={typeof window !== 'undefined' ? `${window.location.origin}/blog/${post.seoPermalink || post.slug}` : ''}
+        />
 
         {/* Comments Section */}
         <section className="mt-12 pt-8 border-t border-stone-200">
