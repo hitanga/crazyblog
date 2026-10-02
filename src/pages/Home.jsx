@@ -13,9 +13,9 @@ export default function Home() {
 
   useEffect(() => {
     let isMounted = true;
-    async function loadData() {
+    async function loadData(showSpinner = false) {
       try {
-        setLoading(true);
+        if (showSpinner) setLoading(true);
         const res = await api.getPosts();
         if (isMounted && res.success) {
           setPosts(res.posts || []);
@@ -23,12 +23,25 @@ export default function Home() {
       } catch (err) {
         if (isMounted) setError(err.message);
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted && showSpinner) setLoading(false);
       }
     }
-    loadData();
+
+    loadData(true);
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadData(false);
+      }
+    };
+
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
     };
   }, []);
 

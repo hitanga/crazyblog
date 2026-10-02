@@ -27,12 +27,26 @@ export default function AdminPosts() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    loadData();
+    loadData(true);
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadData(false);
+      }
+    };
+
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+
+    return () => {
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+    };
   }, []);
 
-  async function loadData() {
+  async function loadData(showSpinner = false) {
     try {
-      setLoading(true);
+      if (showSpinner) setLoading(true);
       const [postsRes, catRes] = await Promise.all([
         api.getPosts(),
         api.getCategories(),
@@ -42,7 +56,7 @@ export default function AdminPosts() {
     } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   }
 

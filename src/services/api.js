@@ -1,10 +1,9 @@
-// Unified API Client with Express Backend & Browser Storage
+// Unified Real-Time API Client with Express Backend & Cross-Device Persistent Storage
 const API_BASE = '/api';
 const STORAGE_KEY = 'crazyblog_posts_v4';
 const DELETED_KEY = 'crazyblog_deleted_v4';
-const INITIALIZED_KEY = 'crazyblog_initialized_v4';
 
-// Helper to track permanently deleted post slugs
+// Helper to track deleted slugs locally
 function getDeletedSlugs() {
   try {
     const raw = localStorage.getItem(DELETED_KEY);
@@ -14,48 +13,28 @@ function getDeletedSlugs() {
   }
 }
 
-function markSlugDeleted(slug) {
-  try {
-    const list = getDeletedSlugs();
-    if (!list.includes(slug)) {
-      list.push(slug);
-      localStorage.setItem(DELETED_KEY, JSON.stringify(list));
-    }
-  } catch (e) {
-    console.warn('Failed to mark slug deleted:', e);
-  }
-}
-
-// Local storage reader - starts with ZERO posts as requested
-function getLocalPosts() {
+// Local cache helpers
+function getCachedPosts() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw !== null) {
+    if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
+      if (Array.isArray(parsed)) return parsed;
     }
-    // Clean initial slate: 0 blogs
-    localStorage.setItem(INITIALIZED_KEY, 'true');
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
-    return [];
-  } catch {
-    return [];
-  }
+  } catch {}
+  return [];
 }
 
-function saveLocalPosts(posts) {
+function setCachedPosts(posts) {
   try {
-    const clean = Array.isArray(posts) ? posts : [];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
-    localStorage.setItem(INITIALIZED_KEY, 'true');
+    const list = Array.isArray(posts) ? posts : [];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
   } catch (e) {
-    console.warn('LocalStorage save failed:', e);
+    console.warn('Failed to update local cache:', e);
   }
 }
 
-// Safely parse JSON from fetch responses
+// Helper to safely parse JSON response from fetch
 async function parseJsonResponse(res) {
   try {
     const text = await res.text();
@@ -65,37 +44,97 @@ async function parseJsonResponse(res) {
   }
 }
 
+// Resilient fetch wrapper with credentials and auto-retry for minor network interruptions
+async function resilientFetch(url, options = {}, retries = 2) {
+  const fetchOpts = {
+    ...options,
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      ...(options.headers || {}),
+    },
+  };
+
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, fetchOpts);
+      return res;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError;
+}
+
 function normalizeCategory(str) {
   return (str || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
 }
 
-export const api = {
-  // 1. Get all posts with filtering and search
-  async getPosts(params = {}) {
-    try {
-      const query = new URLSearchParams();
-      if (params.category && params.category !== 'All') query.append('category', params.category);
-      if (params.search) query.append('search', params.search);
-      if (params.featured) query.append('featured', 'true');
+// Flag to prevent concurrent auto-sync executions
+let isSyncing = false;
 
-      const res = await fetch(`${API_BASE}/posts?${query.toString()}`, {
-        headers: { Accept: 'application/json' },
-      });
+export const api = {
+  // 1. Get all posts with filtering and search (Authoritative from Backend)
+  async getPosts(params = {}) {
+    const query = new URLSearchParams();
+    if (params.category && params.category !== 'All') query.append('category', params.category);
+    if (params.search) query.append('search', params.search);
+    if (params.featured) query.append('featured', 'true');
+
+    try {
+      const res = await resilientFetch(`${API_BASE}/posts?${query.toString()}&_t=${Date.now()}`);
 
       if (res.ok) {
         const data = await parseJsonResponse(res);
         if (data && data.success && Array.isArray(data.posts)) {
-          // Sync with local storage
-          saveLocalPosts(data.posts);
-          return { success: true, count: data.posts.length, posts: data.posts };
+          let serverPosts = data.posts;
+
+          // AUTO-RECOVERY SYNC: If this device has any local-only posts created earlier that are NOT on the server,
+          // push them to the backend server so all other devices see them!
+          if (!isSyncing && !params.category && !params.search && !params.featured) {
+            const cached = getCachedPosts();
+            const serverSlugs = new Set(serverPosts.map((p) => p.slug || p.id));
+            const missingOnServer = cached.filter(
+              (p) => p && p.title && p.slug && !serverSlugs.has(p.slug) && !serverSlugs.has(p.id)
+            );
+
+            if (missingOnServer.length > 0) {
+              isSyncing = true;
+              try {
+                for (const missingPost of missingOnServer) {
+                  await api.createPost(missingPost, { isAutoSync: true });
+                }
+                // Re-fetch authoritative list from server after auto-syncing
+                const reRes = await resilientFetch(`${API_BASE}/posts?_t=${Date.now()}`);
+                if (reRes.ok) {
+                  const reData = await parseJsonResponse(reRes);
+                  if (reData && reData.success && Array.isArray(reData.posts)) {
+                    serverPosts = reData.posts;
+                  }
+                }
+              } catch (syncErr) {
+                console.warn('Auto-sync error:', syncErr);
+              } finally {
+                isSyncing = false;
+              }
+            }
+          }
+
+          // Cache authoritative list
+          setCachedPosts(serverPosts);
+          return { success: true, count: serverPosts.length, posts: serverPosts };
         }
       }
-    } catch {
-      // Backend unavailable
+    } catch (err) {
+      console.warn('Backend fetch failed, attempting cached display:', err);
     }
 
-    // Client-side Fallback
-    let posts = getLocalPosts();
+    // Offline / Network Fallback
+    let posts = getCachedPosts();
     if (params.category && params.category !== 'All') {
       const targetCat = normalizeCategory(params.category);
       posts = posts.filter((p) => p.category && normalizeCategory(p.category) === targetCat);
@@ -120,28 +159,26 @@ export const api = {
   // 2. Get single post by slug
   async getPost(slug) {
     try {
-      const res = await fetch(`${API_BASE}/posts/${encodeURIComponent(slug)}`, {
-        headers: { Accept: 'application/json' },
-      });
-
+      const res = await resilientFetch(`${API_BASE}/posts/${encodeURIComponent(slug)}?_t=${Date.now()}`);
       if (res.ok) {
         const data = await parseJsonResponse(res);
         if (data && data.success && data.post) {
           return data;
         }
       }
-    } catch {
-      // Backend unavailable
+    } catch (err) {
+      console.warn(`Backend fetch failed for /api/posts/${slug}:`, err);
     }
 
-    const posts = getLocalPosts();
-    const post = posts.find((p) => p.slug === slug || p.id === slug || p.seoPermalink === slug);
-    if (!post) return null;
-    return { success: true, post };
+    const cached = getCachedPosts();
+    const post = cached.find((p) => p.slug === slug || p.id === slug || p.seoPermalink === slug);
+    if (post) return { success: true, post };
+
+    return null;
   },
 
-  // 3. Create new post
-  async createPost(data) {
+  // 3. Create a post (Guaranteed Server Persistence)
+  async createPost(data, options = {}) {
     const permalinkInput = data.seoPermalink || data.slug;
     let cleanSlug = (permalinkInput || '')
       .toLowerCase()
@@ -167,399 +204,219 @@ export const api = {
       seoKeywords: (data.seoKeywords || '').trim(),
     };
 
-    // Remove from deleted list if recreating
-    try {
-      const deleted = getDeletedSlugs().filter((s) => s !== payload.slug);
-      localStorage.setItem(DELETED_KEY, JSON.stringify(deleted));
-    } catch {}
-
-    try {
-      const res = await fetch(`${API_BASE}/posts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await parseJsonResponse(res);
-      if (res.ok && result && result.success && result.post) {
-        const current = getLocalPosts();
-        const filtered = current.filter((p) => p.slug !== result.post.slug);
-        saveLocalPosts([result.post, ...filtered]);
-        return result;
-      }
-
-      if (!res.ok && result && result.message) {
-        throw new Error(result.message);
-      }
-    } catch (err) {
-      if (err.message && !err.message.includes('fetch')) {
-        throw err;
-      }
-      // Backend network unavailable, continue to local storage fallback
+    if (!payload.title) {
+      throw new Error('Article title is required');
     }
 
-    // Client-side Fallback
-    const posts = getLocalPosts();
-    let finalSlug = payload.slug;
-    let counter = 1;
-    while (posts.some((p) => p.slug === finalSlug)) {
-      finalSlug = `${payload.slug}-${counter}`;
-      counter++;
+    // Call Express Server
+    const res = await resilientFetch(`${API_BASE}/posts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await parseJsonResponse(res);
+
+    if (res.ok && result && result.success && result.post) {
+      // Update local cache
+      const cached = getCachedPosts();
+      const filtered = cached.filter((p) => p.slug !== result.post.slug && p.id !== result.post.id);
+      setCachedPosts([result.post, ...filtered]);
+      return result;
     }
 
-    const newPost = {
-      id: finalSlug,
-      title: payload.title,
-      slug: finalSlug,
-      excerpt: (payload.excerpt || '').trim(),
-      image: payload.image || '/src/assets/images/hero_urban_avenue_1790847328166.jpg',
-      category: payload.category || 'General',
-      author: payload.author || 'Admin',
-      date: payload.date || new Date().toISOString().split('T')[0],
-      content: payload.content || '<p>Write your story here...</p>',
-      featured: Boolean(payload.featured),
-      seoTitle: payload.seoTitle || payload.title,
-      seoPermalink: finalSlug,
-      seoDescription: payload.seoDescription || payload.excerpt || '',
-      seoKeywords: payload.seoKeywords || '',
-      comments: [],
-    };
-
-    saveLocalPosts([newPost, ...posts]);
-    return { success: true, message: 'Post created successfully', post: newPost };
+    const errorMsg = (result && result.message) || `Server error (${res.status}): Failed to save post to database`;
+    throw new Error(errorMsg);
   },
 
-  // 4. Update post
+  // 4. Update post (Guaranteed Server Persistence)
   async updatePost(slug, data) {
-    try {
-      const res = await fetch(`${API_BASE}/posts/${encodeURIComponent(slug)}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
+    const res = await resilientFetch(`${API_BASE}/posts/${encodeURIComponent(slug)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
 
-      const result = await parseJsonResponse(res);
-      if (res.ok && result && result.success && result.post) {
-        const posts = getLocalPosts().map((p) =>
-          p.slug === slug || p.id === slug ? result.post : p
-        );
-        saveLocalPosts(posts);
-        return result;
-      }
+    const result = await parseJsonResponse(res);
 
-      if (!res.ok && result && result.message) {
-        throw new Error(result.message);
-      }
-    } catch (err) {
-      if (err.message && !err.message.includes('fetch')) {
-        throw err;
-      }
-      // Backend network unavailable, continue to local storage fallback
+    if (res.ok && result && result.success && result.post) {
+      const cached = getCachedPosts();
+      const updated = cached.map((p) =>
+        p.slug === slug || p.id === slug || p.seoPermalink === slug ? result.post : p
+      );
+      setCachedPosts(updated);
+      return result;
     }
 
-    // Client-side Fallback
-    const posts = getLocalPosts();
-    const index = posts.findIndex((p) => p.slug === slug || p.id === slug || p.seoPermalink === slug);
-    if (index === -1) {
-      throw new Error('Post not found');
-    }
-
-    const updatedPost = {
-      ...posts[index],
-      ...data,
-      title: data.title ? data.title.trim() : posts[index].title,
-      slug: data.slug || posts[index].slug,
-      seoTitle: data.seoTitle !== undefined ? data.seoTitle.trim() : posts[index].seoTitle || posts[index].title,
-      seoPermalink: data.seoPermalink !== undefined ? data.seoPermalink.trim() : posts[index].seoPermalink || posts[index].slug,
-      seoDescription: data.seoDescription !== undefined ? data.seoDescription.trim() : posts[index].seoDescription || posts[index].excerpt || '',
-      seoKeywords: data.seoKeywords !== undefined ? data.seoKeywords.trim() : posts[index].seoKeywords || '',
-    };
-
-    posts[index] = updatedPost;
-    saveLocalPosts(posts);
-    return { success: true, message: 'Post updated successfully', post: updatedPost };
+    const errorMsg = (result && result.message) || `Server error (${res.status}): Failed to update post`;
+    throw new Error(errorMsg);
   },
 
-  // 5. Delete post PERMANENTLY
+  // 5. Delete post (Guaranteed Server Persistence)
   async deletePost(slug) {
-    markSlugDeleted(slug);
+    const res = await resilientFetch(`${API_BASE}/posts/${encodeURIComponent(slug)}`, {
+      method: 'DELETE',
+    });
 
-    // Remove from local storage
-    const remaining = getLocalPosts().filter((p) => p.slug !== slug && p.id !== slug && p.seoPermalink !== slug);
-    saveLocalPosts(remaining);
+    const result = await parseJsonResponse(res);
 
-    // Delete from server
-    try {
-      await fetch(`${API_BASE}/posts/${encodeURIComponent(slug)}`, {
-        method: 'DELETE',
-        headers: { Accept: 'application/json' },
-      });
-    } catch {
-      // Backend unavailable
-    }
-
-    return { success: true, message: 'Post permanently deleted' };
-  },
-
-  // 6. Delete all posts (start from zero)
-  async deleteAllPosts() {
-    try {
-      await fetch(`${API_BASE}/posts`, {
-        method: 'DELETE',
-        headers: { Accept: 'application/json' },
-      });
-    } catch {}
-
-    saveLocalPosts([]);
-    localStorage.removeItem(DELETED_KEY);
-    return { success: true, message: 'All posts deleted successfully' };
-  },
-
-  // 7. Get comments for a post
-  async getComments(slug, all = false) {
-    try {
-      const query = all ? '?all=true' : '';
-      const res = await fetch(`${API_BASE}/posts/${encodeURIComponent(slug)}/comments${query}`, {
-        headers: { Accept: 'application/json' },
-      });
-
-      if (res.ok) {
-        const data = await parseJsonResponse(res);
-        if (data && data.success && Array.isArray(data.comments)) {
-          return data;
-        }
-      }
-    } catch {
-      // Backend unavailable
-    }
-
-    // Client-side Fallback
-    const posts = getLocalPosts();
-    const post = posts.find((p) => p.slug === slug || p.id === slug);
-    const comments = (post && post.comments) || [];
-    const filtered = all ? comments : comments.filter((c) => c.approved);
-    return { success: true, count: filtered.length, comments: filtered };
-  },
-
-  // 8. Add comment to a post
-  async addComment(slug, commentData) {
-    try {
-      const res = await fetch(`${API_BASE}/posts/${encodeURIComponent(slug)}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(commentData),
-      });
-
-      if (res.ok) {
-        const result = await parseJsonResponse(res);
-        if (result && result.success && result.comment) {
-          return result;
-        }
-      }
-    } catch {
-      // Backend unavailable
-    }
-
-    // Client-side Fallback
-    const posts = getLocalPosts();
-    const post = posts.find((p) => p.slug === slug || p.id === slug);
-    if (!post) {
-      throw new Error('Post not found');
-    }
-
-    const newComment = {
-      id: `c-${Date.now()}`,
-      name: (commentData.name || 'Anonymous').trim(),
-      email: (commentData.email || '').trim(),
-      comment: (commentData.comment || '').trim(),
-      date: new Date().toISOString().split('T')[0],
-      approved: true,
-    };
-
-    if (!Array.isArray(post.comments)) {
-      post.comments = [];
-    }
-    post.comments.push(newComment);
-    saveLocalPosts(posts);
-
-    return {
-      success: true,
-      message: 'Comment submitted successfully',
-      comment: newComment,
-    };
-  },
-
-  // 9. Update comment status (approve/reject)
-  async updateComment(slug, commentId, updates) {
-    try {
-      const res = await fetch(
-        `${API_BASE}/posts/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          body: JSON.stringify(updates),
-        }
+    if (res.ok && result && result.success) {
+      const cached = getCachedPosts().filter(
+        (p) => p.slug !== slug && p.id !== slug && p.seoPermalink !== slug
       );
-
-      if (res.ok) {
-        const result = await parseJsonResponse(res);
-        if (result && result.success) return result;
-      }
-    } catch {
-      // Backend unavailable
+      setCachedPosts(cached);
+      return result;
     }
 
-    // Client-side Fallback
-    const posts = getLocalPosts();
-    for (const post of posts) {
-      if (Array.isArray(post.comments)) {
-        const target = post.comments.find((c) => c.id === commentId);
-        if (target) {
-          Object.assign(target, updates);
-          saveLocalPosts(posts);
-          return { success: true, message: 'Comment updated successfully', comment: target };
-        }
-      }
-    }
-    throw new Error('Comment not found');
+    const errorMsg = (result && result.message) || `Server error (${res.status}): Failed to delete post`;
+    throw new Error(errorMsg);
   },
 
-  // 10. Delete comment
-  async deleteComment(slug, commentId) {
-    try {
-      const res = await fetch(
-        `${API_BASE}/posts/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}`,
-        {
-          method: 'DELETE',
-          headers: { Accept: 'application/json' },
-        }
-      );
-
-      if (res.ok) {
-        const result = await parseJsonResponse(res);
-        if (result && result.success) return result;
-      }
-    } catch {
-      // Backend unavailable
-    }
-
-    // Client-side Fallback
-    const posts = getLocalPosts();
-    for (const post of posts) {
-      if (Array.isArray(post.comments)) {
-        post.comments = post.comments.filter((c) => c.id !== commentId);
-      }
-    }
-    saveLocalPosts(posts);
-    return { success: true, message: 'Comment deleted successfully' };
-  },
-
-  // 11. Get all comments across all posts for Admin
-  async getAllComments() {
-    try {
-      const res = await fetch(`${API_BASE}/comments/all`, {
-        headers: { Accept: 'application/json' },
-      });
-
-      if (res.ok) {
-        const data = await parseJsonResponse(res);
-        if (data && data.success && Array.isArray(data.comments)) {
-          return data;
-        }
-      }
-    } catch {
-      // Backend unavailable
-    }
-
-    // Client-side Fallback
-    const posts = getLocalPosts();
-    const allComments = [];
-    for (const post of posts) {
-      if (Array.isArray(post.comments)) {
-        for (const c of post.comments) {
-          allComments.push({
-            ...c,
-            postSlug: post.slug,
-            postTitle: post.title,
-          });
-        }
-      }
-    }
-    allComments.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-    return { success: true, count: allComments.length, comments: allComments };
-  },
-
-  // 12. Get all categories
+  // 6. Get all categories
   async getCategories() {
     try {
-      const res = await fetch(`${API_BASE}/categories`, {
-        headers: { Accept: 'application/json' },
-      });
-
+      const res = await resilientFetch(`${API_BASE}/categories?_t=${Date.now()}`);
       if (res.ok) {
         const data = await parseJsonResponse(res);
         if (data && data.success && Array.isArray(data.categories)) {
           return data;
         }
       }
-    } catch {
-      // Backend unavailable
-    }
+    } catch {}
 
-    // Client-side Fallback
-    const posts = getLocalPosts();
-    const countMap = {};
-    for (const p of posts) {
-      const cat = p.category || 'General';
-      countMap[cat] = (countMap[cat] || 0) + 1;
+    const cached = getCachedPosts();
+    const catMap = new Map();
+    for (const post of cached) {
+      const cat = post.category || 'General';
+      catMap.set(cat, (catMap.get(cat) || 0) + 1);
     }
-    const categories = Object.keys(countMap).map((name) => ({
-      name,
-      count: countMap[name],
-    }));
+    const categories = Array.from(catMap.entries()).map(([name, count]) => ({ name, count }));
     return { success: true, count: categories.length, categories };
   },
 
-  // 13. Get CMS stats
-  async getStats() {
+  // 7. Get comments for a post
+  async getComments(slug, all = false) {
+    const query = all ? '?all=true' : '';
     try {
-      const res = await fetch(`${API_BASE}/stats`, {
-        headers: { Accept: 'application/json' },
-      });
-
+      const res = await resilientFetch(
+        `${API_BASE}/posts/${encodeURIComponent(slug)}/comments${query}&_t=${Date.now()}`
+      );
       if (res.ok) {
         const data = await parseJsonResponse(res);
-        if (data && data.success && data.stats) {
+        if (data && data.success && Array.isArray(data.comments)) {
           return data;
         }
       }
-    } catch {
-      // Backend unavailable
+    } catch {}
+
+    return { success: true, count: 0, comments: [] };
+  },
+
+  // 8. Add comment to a post
+  async addComment(slug, commentData) {
+    const res = await resilientFetch(`${API_BASE}/posts/${encodeURIComponent(slug)}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(commentData),
+    });
+
+    const result = await parseJsonResponse(res);
+    if (res.ok && result && result.success) {
+      return result;
     }
 
-    // Client-side Fallback
-    const posts = getLocalPosts();
+    throw new Error((result && result.message) || 'Failed to submit comment');
+  },
+
+  // 9. Update comment status
+  async updateComment(slug, commentId, updates) {
+    const res = await resilientFetch(
+      `${API_BASE}/posts/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      }
+    );
+
+    const result = await parseJsonResponse(res);
+    if (res.ok && result && result.success) {
+      return result;
+    }
+
+    throw new Error((result && result.message) || 'Failed to update comment');
+  },
+
+  // 10. Delete comment
+  async deleteComment(slug, commentId) {
+    const res = await resilientFetch(
+      `${API_BASE}/posts/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+
+    const result = await parseJsonResponse(res);
+    if (res.ok && result && result.success) {
+      return result;
+    }
+
+    throw new Error((result && result.message) || 'Failed to delete comment');
+  },
+
+  // 11. Get all comments across all posts for Admin
+  async getAllComments() {
+    try {
+      const res = await resilientFetch(`${API_BASE}/comments/all?_t=${Date.now()}`);
+      if (res.ok) {
+        const data = await parseJsonResponse(res);
+        if (data && data.success && Array.isArray(data.comments)) {
+          return data;
+        }
+      }
+    } catch {}
+
+    return { success: true, count: 0, comments: [] };
+  },
+
+  // 12. Upload image to server
+  async uploadImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const res = await resilientFetch(`${API_BASE}/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const result = await parseJsonResponse(res);
+    if (res.ok && result && result.success && result.url) {
+      return result;
+    }
+
+    throw new Error((result && result.message) || 'Failed to upload image to server');
+  },
+
+  // 13. System stats for Admin Dashboard
+  async getStats() {
+    const postsRes = await this.getPosts();
+    const posts = postsRes.posts || [];
+    const catSet = new Set(posts.map((p) => p.category || 'General'));
+
     let totalComments = 0;
     let pendingComments = 0;
-    const catSet = new Set();
-
     for (const p of posts) {
-      if (p.category) catSet.add(p.category);
-      if (Array.isArray(p.comments)) {
-        totalComments += p.comments.length;
-        pendingComments += p.comments.filter((c) => !c.approved).length;
+      if (typeof p.totalCommentsCount === 'number') {
+        totalComments += p.totalCommentsCount;
+        pendingComments += p.pendingCommentsCount || 0;
       }
     }
 
@@ -572,43 +429,6 @@ export const api = {
         pendingComments,
       },
     };
-  },
-
-  // 14. Image upload with base64 Data URL fallback
-  async uploadImage(file) {
-    try {
-      const formData = new FormData();
-      formData.append('image', file);
-      const res = await fetch(`${API_BASE}/upload`, {
-        method: 'POST',
-        headers: { Accept: 'application/json' },
-        body: formData,
-      });
-
-      if (res.ok) {
-        const result = await parseJsonResponse(res);
-        if (result && result.success && result.url) {
-          return result;
-        }
-      }
-    } catch {
-      // Backend unavailable
-    }
-
-    // Client-side Fallback: Read file as Data URL
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        resolve({
-          success: true,
-          message: 'Image converted locally for client storage',
-          url: reader.result,
-          filename: file.name,
-        });
-      };
-      reader.onerror = () => reject(new Error('Failed to read image file'));
-      reader.readAsDataURL(file);
-    });
   },
 };
 
