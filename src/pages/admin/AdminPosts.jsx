@@ -63,6 +63,7 @@ export default function AdminPosts() {
   const handleConfirmDelete = async () => {
     if (!deleteModal.slug) return;
     setIsDeleting(true);
+    setError(null);
     try {
       await api.deletePost(deleteModal.slug);
       const remaining = posts.filter(
@@ -73,7 +74,8 @@ export default function AdminPosts() {
       setDeleteModal({ open: false, slug: '', title: '' });
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err) {
-      alert(`Failed to delete post: ${err.message}`);
+      setError(`Failed to delete post: ${err.message}`);
+      setDeleteModal({ open: false, slug: '', title: '' });
     } finally {
       setIsDeleting(false);
     }
@@ -102,6 +104,7 @@ export default function AdminPosts() {
 
   const handleClearDemoPosts = async () => {
     setIsDeleting(true);
+    setError(null);
     try {
       await api.deleteAllPosts();
       await loadData();
@@ -109,7 +112,8 @@ export default function AdminPosts() {
       setSuccessMessage('All blog posts have been cleared! You now have a clean slate.');
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err) {
-      alert(`Failed to clear posts: ${err.message}`);
+      setError(`Failed to clear posts: ${err.message}`);
+      setDemoModalOpen(false);
     } finally {
       setIsDeleting(false);
     }
