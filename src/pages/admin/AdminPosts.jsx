@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import FirebaseRulesAlert from '../../components/FirebaseRulesAlert.jsx';
 import api from '../../services/api.js';
 import {
   PlusCircle,
@@ -51,10 +52,16 @@ export default function AdminPosts() {
         api.getPosts(),
         api.getCategories(),
       ]);
-      if (postsRes.success) setPosts(postsRes.posts || []);
-      if (catRes.success) setCategories(catRes.categories || []);
+      if (postsRes && postsRes.success) setPosts(postsRes.posts || []);
+      if (catRes && catRes.success) setCategories(catRes.categories || []);
+      setError(null);
     } catch (err) {
-      setError(err.message);
+      const errMsg = err.message || String(err);
+      setError(errMsg);
+      try {
+        const fallback = await api.getFallbackPosts();
+        if (fallback.length > 0) setPosts(fallback);
+      } catch {}
     } finally {
       if (showSpinner) setLoading(false);
     }
@@ -138,6 +145,9 @@ export default function AdminPosts() {
 
   return (
     <div className="space-y-6">
+      {/* Firebase security rules notification if locked */}
+      {error && <FirebaseRulesAlert error={error} onRetry={() => loadData(true)} />}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200 pb-5">
         <div>

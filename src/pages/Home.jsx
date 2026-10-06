@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import HeroPost from '../components/HeroPost.jsx';
 import LatestStories from '../components/LatestStories.jsx';
 import StaffPicks from '../components/StaffPicks.jsx';
+import FirebaseRulesAlert from '../components/FirebaseRulesAlert.jsx';
 import api from '../services/api.js';
 import { Loader2, PlusCircle, Sparkles } from 'lucide-react';
 
@@ -19,9 +20,19 @@ export default function Home() {
         const res = await api.getPosts();
         if (isMounted && res.success) {
           setPosts(res.posts || []);
+          setError(null);
         }
       } catch (err) {
-        if (isMounted) setError(err.message);
+        if (isMounted) {
+          const errMsg = err.message || String(err);
+          setError(errMsg);
+          try {
+            const fallback = await api.getFallbackPosts();
+            if (isMounted && fallback.length > 0) {
+              setPosts(fallback);
+            }
+          } catch {}
+        }
       } finally {
         if (isMounted && showSpinner) setLoading(false);
       }
@@ -56,49 +67,27 @@ export default function Home() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="max-w-[800px] mx-auto my-16 p-8 bg-rose-50 border border-rose-200 text-center">
-        <h2 className="text-lg font-bold text-rose-900 uppercase tracking-wider mb-2">
-          Unable to Load Stories
-        </h2>
-        <p className="text-xs text-rose-700">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 px-5 py-2 bg-rose-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-rose-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  // Clean-slate state when blog has zero posts
-  if (posts.length === 0) {
+  // Clean-slate state when blog has zero posts and no error
+  if (posts.length === 0 && !error) {
     return (
       <div className="w-full max-w-[1240px] mx-auto px-4 sm:px-6 py-20 text-center">
         <div className="max-w-lg mx-auto p-10 bg-white border border-stone-200 shadow-sm space-y-4">
-          <div className="w-14 h-14 bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
-            <Sparkles className="w-7 h-7" />
+          <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+            <Sparkles className="w-6 h-6" />
           </div>
-          <div>
-            <span className="text-[11px] font-bold tracking-[0.24em] text-rose-600 uppercase block mb-1">
-              CLEAN SLATE PUBLICATION
-            </span>
-            <h2 className="font-sans font-black text-2xl sm:text-3xl text-stone-900 tracking-tight">
-              Ready for Your Stories
-            </h2>
-            <p className="text-xs sm:text-sm text-stone-600 leading-relaxed max-w-md mx-auto mt-2">
-              All demo posts have been removed. Your CrazyBlog platform is ready for your original horror tales, amazing facts, and knowledge base guides.
-            </p>
-          </div>
+          <h2 className="font-sans font-black text-2xl text-stone-900 tracking-tight">
+            Clean Slate Publication
+          </h2>
+          <p className="text-xs text-stone-500 leading-relaxed">
+            All placeholder articles were removed. Start fresh by publishing your first real dispatch in the CMS!
+          </p>
           <div className="pt-2">
             <Link
               to="/admin/posts/create"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-stone-900 hover:bg-rose-600 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-xs"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-xs"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>Create Your First Article</span>
+              <span>Write First Article</span>
             </Link>
           </div>
         </div>
@@ -106,26 +95,32 @@ export default function Home() {
     );
   }
 
-  // Find latest featured post for Hero
-  const featuredPosts = posts.filter((p) => p.featured);
-  const heroPost = featuredPosts.length > 0 ? featuredPosts[0] : posts[0];
-
-  // Latest stories (take 6 posts)
-  const latestPosts = posts.slice(0, 6);
-
-  // Staff picks (take posts from 2 to 6, or remaining)
-  const staffPicks = posts.length > 3 ? posts.slice(1, 5) : posts;
+  const heroPost = posts[0] || null;
+  const latestPosts = posts.slice(1, 7);
+  const staffPosts = posts.slice(7, 12);
 
   return (
     <div className="w-full">
-      {/* 1. Large Hero Featured Article */}
-      <HeroPost post={heroPost} />
+      {/* Firebase security rules notification if locked */}
+      {error && <FirebaseRulesAlert error={error} onRetry={() => window.location.reload()} />}
 
-      {/* 2. Latest Stories 3-Column Grid */}
-      <LatestStories posts={latestPosts} />
+      {/* Hero Featured Article Section */}
+      {heroPost && <HeroPost post={heroPost} />}
 
-      {/* 3. Staff's Picks Section */}
-      <StaffPicks posts={staffPicks} />
+      {/* Main Content Area */}
+      <div className="max-w-[1240px] mx-auto px-4 sm:px-6 py-10">
+        <div className="flex flex-col lg:flex-row gap-10">
+          {/* Left Column: Latest Stories */}
+          <div className="w-full lg:w-[68%]">
+            <LatestStories posts={latestPosts} />
+          </div>
+
+          {/* Right Column: Staff Picks / Sidebar */}
+          <div className="w-full lg:w-[32%]">
+            <StaffPicks posts={staffPosts} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import PostCard from '../components/PostCard.jsx';
+import FirebaseRulesAlert from '../components/FirebaseRulesAlert.jsx';
 import api from '../services/api.js';
-import { Loader2, Search, SlidersHorizontal } from 'lucide-react';
+import { Loader2, Search } from 'lucide-react';
 
 export default function BlogList() {
   const [posts, setPosts] = useState([]);
@@ -19,10 +20,16 @@ export default function BlogList() {
           api.getPosts(),
           api.getCategories(),
         ]);
-        if (postsRes.success) setPosts(postsRes.posts || []);
-        if (catRes.success) setCategories(catRes.categories || []);
+        if (postsRes && postsRes.success) setPosts(postsRes.posts || []);
+        if (catRes && catRes.success) setCategories(catRes.categories || []);
+        setError(null);
       } catch (err) {
-        setError(err.message);
+        const errMsg = err.message || String(err);
+        setError(errMsg);
+        try {
+          const fallback = await api.getFallbackPosts();
+          if (fallback.length > 0) setPosts(fallback);
+        } catch {}
       } finally {
         setLoading(false);
       }
@@ -43,6 +50,9 @@ export default function BlogList() {
 
   return (
     <div className="w-full max-w-[1240px] mx-auto px-4 sm:px-6 py-10">
+      {/* Firebase security rules notification if locked */}
+      {error && <FirebaseRulesAlert error={error} onRetry={() => window.location.reload()} />}
+
       {/* Header */}
       <div className="border-b border-stone-200 pb-8 mb-8 text-center sm:text-left">
         <span className="text-[11px] font-bold tracking-[0.22em] text-stone-500 uppercase block mb-1">
@@ -102,10 +112,6 @@ export default function BlogList() {
       {loading ? (
         <div className="min-h-[400px] flex items-center justify-center">
           <Loader2 className="w-8 h-8 animate-spin text-rose-600" />
-        </div>
-      ) : error ? (
-        <div className="p-8 bg-rose-50 border border-rose-200 text-center text-rose-800 text-xs">
-          {error}
         </div>
       ) : filteredPosts.length === 0 ? (
         <div className="py-16 text-center bg-stone-50 border border-stone-200">

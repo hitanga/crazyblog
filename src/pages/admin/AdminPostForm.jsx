@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import FirebaseRulesAlert from '../../components/FirebaseRulesAlert.jsx';
 import api from '../../services/api.js';
 import {
   ArrowLeft,
@@ -258,6 +259,7 @@ export default function AdminPostForm() {
       </div>
 
       {/* Notifications */}
+      {error && <FirebaseRulesAlert error={error} />}
       {error && (
         <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />

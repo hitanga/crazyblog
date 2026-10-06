@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PostCard from '../components/PostCard.jsx';
+import FirebaseRulesAlert from '../components/FirebaseRulesAlert.jsx';
 import api from '../services/api.js';
 import { Loader2, ArrowLeft } from 'lucide-react';
+
+function normalizeCategory(str) {
+  return (str || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+}
 
 export default function CategoryPage({ categoryOverride }) {
   const { category: routeCategory } = useParams();
@@ -18,10 +23,22 @@ export default function CategoryPage({ categoryOverride }) {
         setLoading(true);
         const postsRes = await api.getPosts({ category });
         if (isMounted) {
-          if (postsRes.success) setPosts(postsRes.posts || []);
+          if (postsRes && postsRes.success) setPosts(postsRes.posts || []);
+          setError(null);
         }
       } catch (err) {
-        if (isMounted) setError(err.message);
+        if (isMounted) {
+          const errMsg = err.message || String(err);
+          setError(errMsg);
+          try {
+            const fallback = await api.getFallbackPosts();
+            const targetCat = normalizeCategory(category);
+            const filtered = fallback.filter(
+              (p) => p.category && normalizeCategory(p.category) === targetCat
+            );
+            if (isMounted && filtered.length > 0) setPosts(filtered);
+          } catch {}
+        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -35,6 +52,9 @@ export default function CategoryPage({ categoryOverride }) {
 
   return (
     <div className="w-full max-w-[1240px] mx-auto px-4 sm:px-6 py-10">
+      {/* Firebase security rules notification if locked */}
+      {error && <FirebaseRulesAlert error={error} onRetry={() => window.location.reload()} />}
+
       {/* Category Header */}
       <div className="border-b border-stone-200 pb-8 mb-8">
         <Link
@@ -59,14 +79,10 @@ export default function CategoryPage({ categoryOverride }) {
         <div className="min-h-[400px] flex items-center justify-center">
           <Loader2 className="w-8 h-8 animate-spin text-rose-600" />
         </div>
-      ) : error ? (
-        <div className="p-8 bg-rose-50 border border-rose-200 text-rose-800 text-xs">
-          {error}
-        </div>
       ) : posts.length === 0 ? (
         <div className="py-16 text-center bg-stone-50 border border-stone-200">
           <p className="text-sm font-bold uppercase tracking-wider text-stone-700">
-            No articles found in {category}
+            No articles found in {decodeURIComponent(category || '').replace(/-/g, ' ')}
           </p>
           <p className="text-xs text-stone-500 mt-1">
             Check other categories or write a new post in the CMS dashboard.
