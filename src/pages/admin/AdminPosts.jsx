@@ -79,6 +79,27 @@ export default function AdminPosts() {
     }
   };
 
+  const [isSyncingDrafts, setIsSyncingDrafts] = useState(false);
+
+  const handleSyncLocalDrafts = async () => {
+    setIsSyncingDrafts(true);
+    setError(null);
+    try {
+      const res = await api.syncLocalDraftsToServer();
+      await loadData(false);
+      if (res && res.count > 0) {
+        setSuccessMessage(`Successfully recovered and synced ${res.count} articles directly to the server data folder!`);
+      } else {
+        setSuccessMessage('Storage is synchronized. All browser articles match server disk.');
+      }
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (err) {
+      setError(err.message || 'Sync failed');
+    } finally {
+      setIsSyncingDrafts(false);
+    }
+  };
+
   const handleClearDemoPosts = async () => {
     setIsDeleting(true);
     try {
@@ -120,7 +141,22 @@ export default function AdminPosts() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={handleSyncLocalDrafts}
+            disabled={isSyncingDrafts}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold uppercase tracking-wider transition-colors border border-amber-300 cursor-pointer disabled:opacity-50"
+            title="Scan browser storage and copy any local articles directly into the server data folder"
+          >
+            {isSyncingDrafts ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-700" />
+            ) : (
+              <CheckCircle className="w-3.5 h-3.5 text-amber-700" />
+            )}
+            <span>Sync Browser Drafts to Server</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setDemoModalOpen(true)}

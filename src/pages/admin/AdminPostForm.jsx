@@ -191,10 +191,11 @@ export default function AdminPostForm() {
     try {
       if (isEditing) {
         await api.updatePost(editSlug, payload);
-        setSuccess('Post and SEO metadata updated successfully!');
+        setSuccess('Post and SEO metadata updated successfully to server disk!');
       } else {
-        await api.createPost(payload);
-        setSuccess('Post created successfully with dynamic SEO metadata!');
+        const created = await api.createPost(payload);
+        const savedSlug = created?.post?.slug || payload.slug;
+        setSuccess(`Post published and saved to server disk (${savedSlug})! Now visible across all devices.`);
       }
 
       setTimeout(() => {

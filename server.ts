@@ -20,6 +20,16 @@ const isProd = process.env.NODE_ENV === 'production';
 // Ensure required directories exist
 const DATA_DIR = path.resolve(__dirname, 'server/data/posts');
 const UPLOAD_DIR = path.resolve(__dirname, 'server/public/uploads');
+const MASTER_JSON_FILE = path.resolve(__dirname, 'src/data/defaultPosts.json');
+
+const SYNC_JSON_FILES = [
+  path.resolve(__dirname, 'src/data/defaultPosts.json'),
+  path.resolve(__dirname, 'src/data/defaultPost.json'),
+  path.resolve(__dirname, 'defaultPosts.json'),
+  path.resolve(__dirname, 'defaultPost.json'),
+  path.resolve(__dirname, 'server/data/defaultPosts.json'),
+  path.resolve(__dirname, 'server/data/defaultPost.json'),
+];
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -42,7 +52,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
@@ -53,8 +63,8 @@ const upload = multer({
 });
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Ensure all API responses are never cached by intermediate proxies or browsers across devices
 app.use('/api', (_req: Request, res: Response, next: NextFunction) => {
@@ -68,8 +78,35 @@ app.use('/api', (_req: Request, res: Response, next: NextFunction) => {
 app.use('/uploads', express.static(UPLOAD_DIR));
 
 // Helper functions for reading posts & comments
+function syncMasterFile(posts: any[]) {
+  try {
+    const list = Array.isArray(posts) ? posts : [];
+    const jsonString = JSON.stringify(list, null, 2);
+
+    for (const targetPath of SYNC_JSON_FILES) {
+      try {
+        const parentDir = path.dirname(targetPath);
+        if (!fs.existsSync(parentDir)) {
+          fs.mkdirSync(parentDir, { recursive: true });
+        }
+        fs.writeFileSync(targetPath, jsonString, { encoding: 'utf-8', mode: 0o666 });
+        try {
+          fs.chmodSync(targetPath, 0o666);
+        } catch {}
+      } catch (err) {
+        console.warn(`Failed to sync JSON at ${targetPath}:`, err);
+      }
+    }
+  } catch (err) {
+    console.warn('Failed in syncMasterFile:', err);
+  }
+}
+
 function getAllPostsData() {
-  if (!fs.existsSync(DATA_DIR)) return [];
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+
   const entries = fs.readdirSync(DATA_DIR, { withFileTypes: true });
   const posts: any[] = [];
 
@@ -102,6 +139,35 @@ function getAllPostsData() {
           console.error(`Error reading post at ${postFilePath}:`, err);
         }
       }
+    }
+  }
+
+  // If DATA_DIR is empty but MASTER_JSON_FILE has posts, restore them to DATA_DIR!
+  if (posts.length === 0 && fs.existsSync(MASTER_JSON_FILE)) {
+    try {
+      const rawMaster = fs.readFileSync(MASTER_JSON_FILE, 'utf-8');
+      const masterList = JSON.parse(rawMaster);
+      if (Array.isArray(masterList) && masterList.length > 0) {
+        for (const mp of masterList) {
+          if (mp && mp.title && (mp.slug || mp.id)) {
+            const s = mp.slug || mp.id;
+            const pDir = path.join(DATA_DIR, s);
+            if (!fs.existsSync(pDir)) {
+              fs.mkdirSync(pDir, { recursive: true });
+            }
+            fs.writeFileSync(path.join(pDir, 'post.json'), JSON.stringify(mp, null, 2), 'utf-8');
+            fs.writeFileSync(path.join(pDir, 'comments.json'), JSON.stringify([], null, 2), 'utf-8');
+            posts.push({
+              ...mp,
+              commentsCount: 0,
+              totalCommentsCount: 0,
+              pendingCommentsCount: 0,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to restore from master json:', e);
     }
   }
 
@@ -290,7 +356,65 @@ app.post('/api/posts', (req: Request, res: Response) => {
     fs.writeFileSync(path.join(postDir, 'post.json'), JSON.stringify(newPost, null, 2), 'utf-8');
     fs.writeFileSync(path.join(postDir, 'comments.json'), JSON.stringify([], null, 2), 'utf-8');
 
+    // Update master file
+    const all = getAllPostsData();
+    syncMasterFile(all);
+    console.log(`[Storage] Saved new post to disk: ${cleanSlug}`);
+
     res.status(201).json({ success: true, message: 'Post created successfully', post: newPost });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 3.5 POST /api/posts/sync - Batch import/sync from browser storage to server disk
+app.post('/api/posts/sync', (req: Request, res: Response) => {
+  try {
+    const { posts } = req.body;
+    if (!Array.isArray(posts) || posts.length === 0) {
+      return res.json({ success: true, count: 0, message: 'No posts to sync' });
+    }
+
+    let savedCount = 0;
+    for (const post of posts) {
+      if (!post || !post.title) continue;
+      const cleanSlug = (post.seoPermalink || post.slug || post.id || post.title)
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+
+      if (!cleanSlug) continue;
+      const postDir = path.join(DATA_DIR, cleanSlug);
+      if (!fs.existsSync(postDir)) {
+        fs.mkdirSync(postDir, { recursive: true });
+        const finalPost = {
+          id: cleanSlug,
+          title: post.title.trim(),
+          slug: cleanSlug,
+          excerpt: (post.excerpt || '').trim(),
+          image: post.image || '/src/assets/images/hero_urban_avenue_1790847328166.jpg',
+          category: post.category || 'General',
+          author: post.author || 'Admin',
+          date: post.date || new Date().toISOString().split('T')[0],
+          content: post.content || '<p>Write your story here...</p>',
+          featured: Boolean(post.featured),
+          seoTitle: (post.seoTitle || post.title).trim(),
+          seoPermalink: cleanSlug,
+          seoDescription: (post.seoDescription !== undefined ? post.seoDescription : (post.excerpt || '')).trim(),
+          seoKeywords: (post.seoKeywords || '').trim(),
+        };
+        fs.writeFileSync(path.join(postDir, 'post.json'), JSON.stringify(finalPost, null, 2), 'utf-8');
+        fs.writeFileSync(path.join(postDir, 'comments.json'), JSON.stringify([], null, 2), 'utf-8');
+        savedCount++;
+      }
+    }
+
+    const all = getAllPostsData();
+    syncMasterFile(all);
+    console.log(`[Storage] Synced ${savedCount} posts to server disk`);
+
+    res.json({ success: true, message: `Synced ${savedCount} posts to server disk`, count: savedCount, posts: all });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -384,6 +508,11 @@ app.put('/api/posts/:slug', (req: Request, res: Response) => {
 
     fs.writeFileSync(postFilePath, JSON.stringify(updatedPost, null, 2), 'utf-8');
 
+    // Update master files immediately on EDIT!
+    const all = getAllPostsData();
+    syncMasterFile(all);
+    console.log(`[Storage] Updated post and synced master files: ${finalSlug}`);
+
     res.json({ success: true, message: 'Post updated successfully', post: updatedPost });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -402,6 +531,7 @@ app.delete('/api/posts', (_req: Request, res: Response) => {
         }
       }
     }
+    syncMasterFile([]);
     res.json({ success: true, message: 'All posts deleted successfully' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -429,6 +559,7 @@ app.delete('/api/posts/:slug', (req: Request, res: Response) => {
     }
 
     fs.rmSync(postDir, { recursive: true, force: true });
+    syncMasterFile(getAllPostsData());
     res.json({ success: true, message: 'Post deleted successfully' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -812,6 +943,18 @@ async function startServer() {
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
+
+  app.get(['/defaultPosts.json', '/defaultPost.json'], (_req: Request, res: Response) => {
+    const posts = getAllPostsData();
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.json(posts);
+  });
+
+  // Ensure all master files (defaultPosts.json, etc.) are synchronized on startup
+  const initialPosts = getAllPostsData();
+  syncMasterFile(initialPosts);
+  console.log(`[Storage] Synchronized master files on boot (${initialPosts.length} posts).`);
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`CrazyBlog & CMS server running on http://0.0.0.0:${PORT}`);

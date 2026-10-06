@@ -4,10 +4,10 @@ import PostCard from '../components/PostCard.jsx';
 import api from '../services/api.js';
 import { Loader2, ArrowLeft } from 'lucide-react';
 
-export default function CategoryPage() {
-  const { category } = useParams();
+export default function CategoryPage({ categoryOverride }) {
+  const { category: routeCategory } = useParams();
+  const category = categoryOverride || routeCategory;
   const [posts, setPosts] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -16,13 +16,9 @@ export default function CategoryPage() {
     async function loadCategoryData() {
       try {
         setLoading(true);
-        const [postsRes, catRes] = await Promise.all([
-          api.getPosts({ category }),
-          api.getCategories(),
-        ]);
+        const postsRes = await api.getPosts({ category });
         if (isMounted) {
           if (postsRes.success) setPosts(postsRes.posts || []);
-          if (catRes.success) setCategories(catRes.categories || []);
         }
       } catch (err) {
         if (isMounted) setError(err.message);
@@ -57,28 +53,6 @@ export default function CategoryPage() {
         <p className="mt-2 text-xs text-stone-500">
           Showing {posts.length} {posts.length === 1 ? 'article' : 'articles'} filed under {decodeURIComponent(category || '').replace(/-/g, ' ')}.
         </p>
-
-        {/* Other categories pills */}
-        <div className="mt-6 flex flex-wrap items-center gap-2">
-          {categories.map((c) => {
-            const isMatch =
-              c.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') ===
-              (category || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-            return (
-              <Link
-                key={c.name}
-                to={`/category/${c.name.replace(/\s+/g, '-')}`}
-                className={`px-3 py-1 text-xs font-bold uppercase tracking-wider transition-colors ${
-                  isMatch
-                    ? 'bg-rose-600 text-white'
-                    : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
-                }`}
-              >
-                {c.name} ({c.count})
-              </Link>
-            );
-          })}
-        </div>
       </div>
 
       {loading ? (

@@ -46,6 +46,8 @@ export default function App() {
             <Route path="/blog" element={<BlogList />} />
             <Route path="/blog/:slug" element={<BlogDetail />} />
             <Route path="/category/:category" element={<CategoryPage />} />
+            <Route path="/knowledge-base" element={<CategoryPage categoryOverride="Knowledge-Base" />} />
+            <Route path="/knowledgebase" element={<CategoryPage categoryOverride="Knowledge-Base" />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/features" element={<FeaturesPage />} />
             <Route path="*" element={<NotFound />} />

@@ -13,16 +13,60 @@ function getDeletedSlugs() {
   }
 }
 
-// Local cache helpers
+// Deep scanner across all localStorage and sessionStorage keys to find any drafts or posts
+export function getAllBrowserDrafts() {
+  const candidateKeys = [
+    'crazyblog_posts_v4',
+    'crazyblog_posts_v3',
+    'crazyblog_posts_v2',
+    'crazyblog_posts_v1',
+    'crazyblog_posts',
+    'crazyblog_admin_posts',
+    'posts',
+    'articles',
+    'blog_posts',
+  ];
+
+  const foundMap = new Map();
+
+  const scanStorage = (storage) => {
+    if (!storage) return;
+    try {
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i);
+        if (!key || key.includes('firebase') || key.includes('session') || key === DELETED_KEY) continue;
+        try {
+          const raw = storage.getItem(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            for (const item of parsed) {
+              if (item && typeof item === 'object' && item.title) {
+                const identifier = item.slug || item.id || item.title;
+                if (!foundMap.has(identifier)) {
+                  foundMap.set(identifier, item);
+                }
+              }
+            }
+          } else if (parsed && typeof parsed === 'object' && parsed.title) {
+            const identifier = parsed.slug || parsed.id || parsed.title;
+            if (!foundMap.has(identifier)) {
+              foundMap.set(identifier, parsed);
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+  };
+
+  scanStorage(typeof localStorage !== 'undefined' ? localStorage : null);
+  scanStorage(typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+
+  return Array.from(foundMap.values());
+}
+
 function getCachedPosts() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch {}
-  return [];
+  return getAllBrowserDrafts();
 }
 
 function setCachedPosts(posts) {
@@ -78,6 +122,33 @@ function normalizeCategory(str) {
 let isSyncing = false;
 
 export const api = {
+  // Sync all locally found browser drafts to server disk
+  async syncLocalDraftsToServer() {
+    const drafts = getAllBrowserDrafts();
+    if (drafts.length === 0) return { success: true, count: 0, message: 'No local drafts found' };
+
+    try {
+      const res = await resilientFetch(`${API_BASE}/posts/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ posts: drafts }),
+      });
+
+      if (res.ok) {
+        const data = await parseJsonResponse(res);
+        if (data && data.success) {
+          if (Array.isArray(data.posts)) {
+            setCachedPosts(data.posts);
+          }
+          return data;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to batch sync drafts to server:', e);
+    }
+    return { success: false, message: 'Sync failed' };
+  },
+
   // 1. Get all posts with filtering and search (Authoritative from Backend)
   async getPosts(params = {}) {
     const query = new URLSearchParams();
@@ -93,27 +164,27 @@ export const api = {
         if (data && data.success && Array.isArray(data.posts)) {
           let serverPosts = data.posts;
 
-          // AUTO-RECOVERY SYNC: If this device has any local-only posts created earlier that are NOT on the server,
-          // push them to the backend server so all other devices see them!
+          // AUTO-RECOVERY SYNC: If this device has any local drafts created earlier that are NOT on the server,
+          // push them to the backend server disk so all other devices see them!
           if (!isSyncing && !params.category && !params.search && !params.featured) {
-            const cached = getCachedPosts();
+            const drafts = getAllBrowserDrafts();
             const serverSlugs = new Set(serverPosts.map((p) => p.slug || p.id));
-            const missingOnServer = cached.filter(
-              (p) => p && p.title && p.slug && !serverSlugs.has(p.slug) && !serverSlugs.has(p.id)
+            const missingOnServer = drafts.filter(
+              (p) => p && p.title && !serverSlugs.has(p.slug) && !serverSlugs.has(p.id)
             );
 
             if (missingOnServer.length > 0) {
               isSyncing = true;
               try {
-                for (const missingPost of missingOnServer) {
-                  await api.createPost(missingPost, { isAutoSync: true });
-                }
-                // Re-fetch authoritative list from server after auto-syncing
-                const reRes = await resilientFetch(`${API_BASE}/posts?_t=${Date.now()}`);
-                if (reRes.ok) {
-                  const reData = await parseJsonResponse(reRes);
-                  if (reData && reData.success && Array.isArray(reData.posts)) {
-                    serverPosts = reData.posts;
+                const syncRes = await resilientFetch(`${API_BASE}/posts/sync`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ posts: missingOnServer }),
+                });
+                if (syncRes.ok) {
+                  const syncData = await parseJsonResponse(syncRes);
+                  if (syncData && syncData.success && Array.isArray(syncData.posts)) {
+                    serverPosts = syncData.posts;
                   }
                 }
               } catch (syncErr) {
@@ -274,6 +345,16 @@ export const api = {
 
     const errorMsg = (result && result.message) || `Server error (${res.status}): Failed to delete post`;
     throw new Error(errorMsg);
+  },
+
+  // 5.5 Delete all posts (clear slate)
+  async deleteAllPosts() {
+    const res = await resilientFetch(`${API_BASE}/posts`, {
+      method: 'DELETE',
+    });
+    const result = await parseJsonResponse(res);
+    setCachedPosts([]);
+    return result || { success: true };
   },
 
   // 6. Get all categories
