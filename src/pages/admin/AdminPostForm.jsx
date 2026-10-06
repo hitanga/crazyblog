@@ -191,11 +191,11 @@ export default function AdminPostForm() {
     try {
       if (isEditing) {
         await api.updatePost(editSlug, payload);
-        setSuccess('Post and SEO metadata updated successfully to server disk!');
+        setSuccess('Post and SEO metadata updated successfully in Firebase Firestore!');
       } else {
         const created = await api.createPost(payload);
         const savedSlug = created?.post?.slug || payload.slug;
-        setSuccess(`Post published and saved to server disk (${savedSlug})! Now visible across all devices.`);
+        setSuccess(`Post published and saved to Firebase Firestore (${savedSlug})! Now live on all devices.`);
       }
 
       setTimeout(() => {
@@ -723,7 +723,7 @@ export default function AdminPostForm() {
             ) : (
               <Save className="w-4 h-4" />
             )}
-            <span>{isEditing ? 'Save Post & SEO Metadata' : 'Publish Story & SEO to JSON'}</span>
+            <span>{isEditing ? 'Save Post & SEO to Firebase' : 'Publish Story & SEO to Firebase'}</span>
           </button>
         </div>
       </form>

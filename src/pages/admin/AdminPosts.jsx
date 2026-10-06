@@ -140,35 +140,21 @@ export default function AdminPosts() {
           <h1 className="font-sans font-black text-2xl sm:text-3xl text-stone-900 tracking-tight">
             All Blog Dispatches
           </h1>
-          <p className="text-xs text-stone-500 mt-1">
-            Total {posts.length} articles active in your publication.
+          <p className="text-xs text-stone-500 mt-1 flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Total {posts.length} articles synchronized live in Firebase Firestore.</span>
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
             type="button"
-            onClick={handleSyncLocalDrafts}
-            disabled={isSyncingDrafts}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold uppercase tracking-wider transition-colors border border-amber-300 cursor-pointer disabled:opacity-50"
-            title="Scan browser storage and copy any local articles directly into the server data folder"
-          >
-            {isSyncingDrafts ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-700" />
-            ) : (
-              <CheckCircle className="w-3.5 h-3.5 text-amber-700" />
-            )}
-            <span>Sync Browser Drafts to Server</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setDemoModalOpen(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold uppercase tracking-wider transition-colors border border-stone-200 cursor-pointer"
-            title="Permanently remove old placeholder demo articles"
+            title="Permanently remove all articles from Firebase Firestore"
           >
             <Trash2 className="w-3.5 h-3.5 text-stone-500" />
-            <span>Clear Old Demo Posts</span>
+            <span>Clear All Posts</span>
           </button>
 
           <Link

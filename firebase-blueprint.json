@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "Post": {
+      "title": "Post",
+      "description": "A blog dispatch and editorial article",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 300 },
+        "slug": { "type": "string", "maxLength": 200 },
+        "excerpt": { "type": "string", "maxLength": 1000 },
+        "content": { "type": "string", "maxLength": 100000 },
+        "image": { "type": "string", "maxLength": 2048 },
+        "category": { "type": "string", "maxLength": 100 },
+        "author": { "type": "string", "maxLength": 100 },
+        "date": { "type": "string", "maxLength": 50 },
+        "featured": { "type": "boolean" },
+        "seoTitle": { "type": "string", "maxLength": 300 },
+        "seoPermalink": { "type": "string", "maxLength": 200 },
+        "seoDescription": { "type": "string", "maxLength": 1000 },
+        "seoKeywords": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["title", "slug"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Public feedback and comments for a post",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "comment": { "type": "string", "maxLength": 2000 },
+        "date": { "type": "string", "maxLength": 50 },
+        "approved": { "type": "boolean" }
+      },
+      "required": ["name", "email", "comment"]
+    }
+  },
+  "firestore": {
+    "/posts/{postId}": {
+      "schema": { "$ref": "#/entities/Post" },
+      "description": "Collection of blog dispatches and articles"
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Reader comments for a specific post"
+    }
+  }
+}
