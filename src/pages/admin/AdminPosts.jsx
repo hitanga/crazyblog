@@ -87,16 +87,20 @@ export default function AdminPosts() {
     setIsSyncingDrafts(true);
     setError(null);
     try {
-      const res = await api.syncLocalDraftsToServer();
+      const res = await api.seedArticlesToFirebase();
       await loadData(false);
       if (res && res.count > 0) {
-        setSuccessMessage(`Successfully recovered and synced ${res.count} articles directly to the server data folder!`);
+        setSuccessMessage(`Successfully uploaded ${res.count} articles to your Firebase database!`);
       } else {
-        setSuccessMessage('Storage is synchronized. All browser articles match server disk.');
+        setSuccessMessage('All articles are synchronized with Firebase.');
       }
       setTimeout(() => setSuccessMessage(null), 5000);
     } catch (err) {
-      setError(err.message || 'Sync failed');
+      setError(
+        err.message?.includes('permission-denied') || String(err).includes('PERMISSION_DENIED')
+          ? "Permission Denied: Please open your Firebase Console (crazy-3383c), click the 'Rules' tab, and publish allow read, write: if true; rules."
+          : (err.message || 'Firebase upload failed')
+      );
     } finally {
       setIsSyncingDrafts(false);
     }
@@ -147,6 +151,21 @@ export default function AdminPosts() {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={handleSyncLocalDrafts}
+            disabled={isSyncingDrafts}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider transition-colors border border-emerald-300 cursor-pointer disabled:opacity-50"
+            title="Upload and synchronize all articles into your Firebase database"
+          >
+            {isSyncingDrafts ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-700" />
+            ) : (
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
+            )}
+            <span>Upload Articles to Firebase</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setDemoModalOpen(true)}

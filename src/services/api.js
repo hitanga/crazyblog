@@ -368,7 +368,42 @@ export const api = {
 
   // Sync / Migration helper if needed
   async syncLocalDraftsToServer() {
-    return { success: true, count: 0, message: 'Connected directly to Firebase Firestore' };
+    return this.seedArticlesToFirebase();
+  },
+
+  // Seed / Sync articles into the active Firebase database
+  async seedArticlesToFirebase() {
+    let rawList = [];
+    try {
+      const res = await fetch('/src/data/defaultPosts.json');
+      if (res.ok) {
+        rawList = await res.json();
+      }
+    } catch {}
+
+    if (!Array.isArray(rawList) || rawList.length === 0) {
+      try {
+        const res = await fetch('/defaultPosts.json');
+        if (res.ok) rawList = await res.json();
+      } catch {}
+    }
+
+    let count = 0;
+    for (const post of rawList) {
+      const slug = post.slug || post.id;
+      if (slug) {
+        try {
+          const docRef = doc(db, 'posts', slug);
+          await setDoc(docRef, { ...post, id: slug, slug }, { merge: true });
+          count++;
+        } catch (e) {
+          console.warn('Failed to upload post:', slug, e);
+          throw e;
+        }
+      }
+    }
+
+    return { success: true, count, message: `Uploaded ${count} articles to Firebase` };
   },
 };
 

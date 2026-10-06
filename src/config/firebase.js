@@ -13,8 +13,13 @@ import firebaseConfig from './firebaseAppletConfig.js';
 // Initialize Firebase with the provisioned configuration
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// CRITICAL: Initialize Firestore with the exact provisioned databaseId
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Connect to (default) database or specified named database
+export const db =
+  firebaseConfig.firestoreDatabaseId &&
+  firebaseConfig.firestoreDatabaseId !== '(default)' &&
+  firebaseConfig.firestoreDatabaseId !== 'default'
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app);
 export const auth = getAuth(app);
 
 // Error handling types and helper as specified by the Firebase Integration Skill
